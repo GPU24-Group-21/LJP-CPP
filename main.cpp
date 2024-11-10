@@ -10,7 +10,7 @@ using namespace std;
 
 // Constants
 Config config;
-bool debug = false;
+bool debug = true;
 
 // Statistical variables
 // velocity sum
