@@ -3,4 +3,6 @@ project(sequential)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(sequential main.cpp)
+add_executable(sequential main.cpp
+        Models.h
+)
