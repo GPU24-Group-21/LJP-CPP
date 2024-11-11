@@ -2,3 +2,5 @@
 cmake-build-debug
 output/
 ljp
+m.in
+mols.in
