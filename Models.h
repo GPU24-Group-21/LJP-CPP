@@ -18,9 +18,9 @@ struct Config {
     float temperature = 0;
 };
 
-static constexpr uint32_t IADD = 453806245;
-static constexpr uint32_t IMUL = 314159269;
-static constexpr uint32_t MASK = 2147483647;
+static constexpr long IADD = 453806245;
+static constexpr long IMUL = 314159269;
+static constexpr long MASK = 2147483647;
 static constexpr int NDIM = 2;
 static constexpr double SCALE = 0.4656612873e-9;
 

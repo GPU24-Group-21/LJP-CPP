@@ -11,6 +11,7 @@ using namespace std;
 // Constants
 Config config;
 bool debug = false;
+bool outfile = false;
 
 uint32_t RAND_SEED_P = 17;
 
@@ -202,9 +203,12 @@ void toroidal(double &x, double &y) {
 // Calculate the force between two molecules
 void leapfrog(const int n, Molecule *mols, const bool pre) {
     for (int i = 0; i < n; i++) {
+        // v(t + Δt/2) = v(t) + (Δt/2)a(t)
         mols[i].vel[0] += 0.5 * config.deltaT * mols[i].acc[0];
         mols[i].vel[1] += 0.5 * config.deltaT * mols[i].acc[1];
+
         if (pre) {
+            // r(t + Δt) = r(t) + Δt v(t + Δt/2)
             mols[i].pos[0] += config.deltaT * mols[i].vel[0];
             mols[i].pos[1] += config.deltaT * mols[i].vel[1];
         }
@@ -224,8 +228,8 @@ void evaluateForce(const int n, Molecule *mols, double &uSum, double &virSum) {
         mols[i].acc[1] = 0;
     }
 
-    for (int i = 0; i < n - 1; i++) {
-        for (int j = i + 1; j < n; j++) {
+    for (size_t i = 0; i < n - 1; i++) {
+        for (size_t j = i + 1; j < n; j++) {
             // Make DeltaRij: (sum of squared RJ1-RJ2)
             double dr[2] = {
                 mols[i].pos[0] - mols[j].pos[0],
@@ -233,17 +237,12 @@ void evaluateForce(const int n, Molecule *mols, double &uSum, double &virSum) {
             };
             toroidal(dr[0], dr[1]);
             const double rr = dr[0] * dr[0] + dr[1] * dr[1];
-            const double r = sqrt(rr);
 
             // case dr2 < Rc^2
             if (rr < rCut * rCut) {
-                const double r2i = SIGMA / rr;
-                double rri3 = r2i * r2i * r2i;
+                const double r = sqrt(rr);
 
-                // Forces calculation by Lennard-Jones potential (original from Rapaport)
-                // double fcVal = 48.0 * rri3 * (rri3 - 0.5) * r2i;
-                // Forces calculated with the completed Lennard-Jones.
-                const double fcVal = 48 * EPSILON * pow(SIGMA, 12) / pow(r, 13) - 24 * EPSILON * pow(SIGMA, 6) /
+                const double fcVal = 48.0 * EPSILON * pow(SIGMA, 12) / pow(r, 13) - 24.0 * EPSILON * pow(SIGMA, 6) /
                                      pow(r, 7);
 
                 // update the acc
@@ -327,8 +326,9 @@ int main(const int argc, char *argv[]) {
     start_time = start;
 
     // Parse arguments
-    if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <config file> [init mol file]" << std::endl;
+    if (argc < 3) {
+        std::cerr << "Usage: " << argv[0] << " <config file> <0: no file output, 1:output step file> [init mol file]" <<
+                std::endl;
         return 1;
     }
 
@@ -340,8 +340,11 @@ int main(const int argc, char *argv[]) {
 
     const int mSize = config.initUcell_x * config.initUcell_y;
     Molecule molecules[mSize];
-    if (argc == 3) {
-        const string molFile = argv[2];
+    cout << "Size: " << config.initUcell_x << "x" << config.initUcell_y << "(" << mSize << " mols)" << endl;
+
+    outfile = atoi(argv[2]);
+    if (argc == 4) {
+        const string molFile = argv[3];
         readMoo(molFile, mSize, molecules);
     } else {
         rCut = pow(2.0, 1.0 / 6.0 * SIGMA);
@@ -395,7 +398,9 @@ int main(const int argc, char *argv[]) {
             molecules[i].vel[1] -= vSum[1] / mSize;
         }
 
-        outputMolInitData(mSize, molecules, rCut, region, velMag);
+        if (outfile) {
+            outputMolInitData(mSize, molecules, rCut, region, velMag);
+        }
     }
 
     int step = 0;
@@ -413,7 +418,9 @@ int main(const int argc, char *argv[]) {
             stepSummary(mSize, step, deltaT);
         }
         // output the result
-        outputResult("output/" + to_string(step - 1) + ".out", mSize, molecules, step - 1, deltaT);
+        if (outfile) {
+            outputResult("output/" + to_string(step - 1) + ".out", mSize, molecules, step - 1, deltaT);
+        }
     }
     breakPoint("Total Time", true);
     return 0;
