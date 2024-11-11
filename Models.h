@@ -4,6 +4,8 @@
 
 #ifndef MODELS_H
 #define MODELS_H
+#include <cstdint>
+#include <cstdlib>
 
 struct Config {
     float deltaT = 0;
@@ -16,11 +18,11 @@ struct Config {
     float temperature = 0;
 };
 
-#define IADD 453806245;
-#define IMUL 314159269;
-#define MASK 2147483647;
-#define SCALE 0.4656612873e-9;
-#define randSeedP 17
+static constexpr uint32_t IADD = 453806245;
+static constexpr uint32_t IMUL = 314159269;
+static constexpr uint32_t MASK = 2147483647;
+static constexpr int NDIM = 2;
+static constexpr double SCALE = 0.4656612873e-9;
 
 // LJP parameters:
 static double EPSILON = 1.0;
@@ -36,32 +38,32 @@ struct Molecule {
     // Acceleration
     double acc[2] = {0, 0};
 
-    void multiple_pos(double a) {
+    void multiple_pos(const double a) {
         pos[0] *= a;
         pos[1] *= a;
     }
 
-    void multiple_vel(double a) {
+    void multiple_vel(const double a) {
         vel[0] *= a;
         vel[1] *= a;
     }
 
-    void multiple_acc(double a) {
+    void multiple_acc(const double a) {
         acc[0] *= a;
         acc[1] *= a;
     }
 
-    void add_pos(double a) {
+    void add_pos(const double a) {
         pos[0] += a;
         pos[1] += a;
     }
 
-    void add_vel(double a) {
+    void add_vel(const double a) {
         vel[0] += a;
         vel[1] += a;
     }
 
-    void add_acc(double a) {
+    void add_acc(const double a) {
         acc[0] += a;
         acc[1] += a;
     }

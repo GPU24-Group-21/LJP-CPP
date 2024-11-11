@@ -12,6 +12,8 @@ using namespace std;
 Config config;
 bool debug = false;
 
+uint32_t RAND_SEED_P = 17;
+
 // Statistical variables
 // velocity sum
 double vSum[2] = {0, 0};
@@ -29,7 +31,6 @@ double rCut = 0;
 double region[2] = {0, 0};
 double velMag = 0;
 
-
 //timer
 auto start = chrono::high_resolution_clock::now();
 auto start_time = start;
@@ -44,6 +45,17 @@ void breakPoint(const string &msg, const bool end = false) {
     start_time = chrono::high_resolution_clock::now();
 }
 
+// random
+double random_r() {
+    RAND_SEED_P = (RAND_SEED_P * IMUL + IADD) & MASK;
+    return SCALE * RAND_SEED_P;
+}
+
+void random_velocity(double &v1, double &v2) {
+    const double s = 2.0 * M_PI * random_r();
+    v1 = cos(s);
+    v2 = sin(s);
+}
 
 // Read input file
 void readToken(std::ifstream &file, const string &token) {
@@ -133,14 +145,8 @@ void readMoo(const string &filename, long N, Molecule *molecules) {
     }
 }
 
-void randVec(double vec[2]) {
-    double r = sqrt(-2.0 * log(rand() / (RAND_MAX + 1.0)));
-    double theta = 2.0 * M_PI * (rand() / (RAND_MAX + 1.0));
-    vec[0] = r * cos(theta);
-    vec[1] = r * sin(theta);
-}
-
-void outputResult(const string &filename, const long n, const Molecule *molecules, const int step, const double dTime) {
+// Output result
+void outputResult(const string &filename, const int n, const Molecule *molecules, const int step, const double dTime) {
     ofstream file;
     file.open(filename);
 
@@ -151,10 +157,8 @@ void outputResult(const string &filename, const long n, const Molecule *molecule
 
     file << "step: " << to_string(step) << endl;
     file << "ts: " << dTime << endl;
-    file << "vSum0: " << vSum[0] / n << endl;
-    file << "vSum1: " << vSum[1] / n << endl;
     file << "====================" << endl;
-    file << setprecision(15) << fixed;
+    file << setprecision(5) << fixed;
     const int mark1 = n / 2 + n / 8;
     const int mark2 = n / 2 + n / 8 + 1;
     for (int i = 0; i < n; i++) {
@@ -163,7 +167,26 @@ void outputResult(const string &filename, const long n, const Molecule *molecule
         } else {
             file << "o-" << molecules[i].id << " ";
         }
-        file << molecules[i].pos[0] << " " << molecules[i].pos[1] << " " << endl;
+        file << molecules[i].pos[0] << " " << molecules[i].pos[1] << endl;
+    }
+}
+
+void outputMolInitData(const long n, const Molecule *molecules, const double rCut, double region[2],
+                       const double velMag) {
+    ofstream file;
+    file.open("mols.in");
+    file << setprecision(5) << fixed;
+    file << "rCut " << rCut << endl;
+    file << "region " << region[0] << " " << region[1] << endl;
+    file << "velMag " << velMag << endl;
+    file << "vSum " << vSum[0] << " " << vSum[1] << endl;
+    for (int i = 0; i < n; i++) {
+        file << molecules[i].pos[0] << " "
+                << molecules[i].pos[1] << " "
+                << molecules[i].vel[0] << " "
+                << molecules[i].vel[1] << " "
+                << molecules[i].acc[0] << " "
+                << molecules[i].acc[1] << endl;
     }
 }
 
@@ -177,7 +200,7 @@ void toroidal(double &x, double &y) {
 }
 
 // Calculate the force between two molecules
-void leapfrog(const long n, Molecule *mols, const bool pre) {
+void leapfrog(const int n, Molecule *mols, const bool pre) {
     for (int i = 0; i < n; i++) {
         mols[i].vel[0] += 0.5 * config.deltaT * mols[i].acc[0];
         mols[i].vel[1] += 0.5 * config.deltaT * mols[i].acc[1];
@@ -188,13 +211,13 @@ void leapfrog(const long n, Molecule *mols, const bool pre) {
     }
 }
 
-void boundaryCondition(const long n, Molecule *mols) {
+void boundaryCondition(const int n, Molecule *mols) {
     for (int i = 0; i < n; i++) {
         toroidal(mols[i].pos[0], mols[i].pos[1]);
     }
 }
 
-void evaluateForce(const long n, Molecule *mols, double &uSum, double &virSum) {
+void evaluateForce(const int n, Molecule *mols, double &uSum, double &virSum) {
     // reset the acceleration
     for (int i = 0; i < n; i++) {
         mols[i].acc[0] = 0;
@@ -243,7 +266,7 @@ void evaluateForce(const long n, Molecule *mols, double &uSum, double &virSum) {
     }
 }
 
-void evaluateProperties(const long n, const Molecule *mols, const double &uSum, const double &virSum) {
+void evaluateProperties(const int n, const Molecule *mols, const double &uSum, const double &virSum) {
     vSum[0] = 0;
     vSum[1] = 0;
 
@@ -268,7 +291,7 @@ void evaluateProperties(const long n, const Molecule *mols, const double &uSum, 
     pressure2 += p * p;
 }
 
-void stepSummary(const long n, const int step, const double dTime) {
+void stepSummary(const int n, const int step, const double dTime) {
     // average and standard deviation of kinetic energy, total energy, and pressure
     double keAvg = keSum / config.stepAvg;
     double totalAvg = totalEnergy / config.stepAvg;
@@ -299,7 +322,7 @@ void stepSummary(const long n, const int step, const double dTime) {
 }
 
 // Main function
-int main(int argc, char *argv[]) {
+int main(const int argc, char *argv[]) {
     start = chrono::high_resolution_clock::now();
     start_time = start;
 
@@ -315,7 +338,7 @@ int main(int argc, char *argv[]) {
     // create output folder '/output' if not exist
     system("mkdir -p output");
 
-    const long mSize = config.initUcell_x * config.initUcell_y;
+    const int mSize = config.initUcell_x * config.initUcell_y;
     Molecule molecules[mSize];
     if (argc == 3) {
         const string molFile = argv[2];
@@ -325,30 +348,54 @@ int main(int argc, char *argv[]) {
         // Region size
         region[0] = 1.0 / sqrt(config.density) * config.initUcell_x;
         region[1] = 1.0 / sqrt(config.density) * config.initUcell_y;
+
         // Velocity magnitude
-        velMag = sqrt(3.0 * config.temperature);
+        velMag = sqrt(NDIM * (1.0 - 1.0 / mSize) * config.temperature);
+
+        if (debug) {
+            cout << "=========== Random Init ===========" << endl;
+            cout << "  rCut: " << rCut << endl;
+            cout << "  region: " << region[0] << " " << region[1] << endl;
+            cout << "  velMag: " << velMag << endl;
+        }
+
         const double gap[2] = {
             region[0] / config.initUcell_x,
             region[1] / config.initUcell_y
         };
-        for (int i = 0; i < config.initUcell_x; i++) {
-            for (int j = 0; j < config.initUcell_y; j++) {
+
+        for (int y = 0; y < config.initUcell_x; y++) {
+            for (int x = 0; x < config.initUcell_y; x++) {
                 Molecule m;
                 // assign molecule id
-                m.id = i * config.initUcell_y + j;
+                m.id = y * config.initUcell_y + x;
 
                 // assign position
-                m.pos[0] = (i + 0.5) * gap[0] + region[0] * -0.5;
-                m.pos[1] = (j + 0.5) * gap[1] + region[1] * -0.5;
+                m.pos[0] = (x + 0.5) * gap[0] + region[0] * -0.5;
+                m.pos[1] = (y + 0.5) * gap[1] + region[1] * -0.5;
 
                 // assign velocity
-                m.vel[0] = velMag * (rand() / (RAND_MAX + 1.0) - 0.5);
-                m.vel[1] = velMag * (rand() / (RAND_MAX + 1.0) - 0.5);
+                random_velocity(m.vel[0], m.vel[1]);
+                m.multiple_vel(velMag);
+
+                // update the vsum
+                vSum[0] += m.vel[0];
+                vSum[1] += m.vel[1];
+
+                // assign acceleration
+                m.multiple_acc(0);
 
                 // add to list
-                molecules[i * config.initUcell_y + j] = m;
+                molecules[y * config.initUcell_y + x] = m;
             }
         }
+
+        for (int i = 0; i < mSize; i++) {
+            molecules[i].vel[0] -= vSum[0] / mSize;
+            molecules[i].vel[1] -= vSum[1] / mSize;
+        }
+
+        outputMolInitData(mSize, molecules, rCut, region, velMag);
     }
 
     int step = 0;
@@ -356,7 +403,7 @@ int main(int argc, char *argv[]) {
         step++;
         double uSum = 0;
         double virSum = 0;
-        double deltaT = (double) step * config.deltaT;
+        const double deltaT = static_cast<double>(step) * config.deltaT;
         leapfrog(mSize, molecules, true);
         boundaryCondition(mSize, molecules);
         evaluateForce(mSize, molecules, uSum, virSum);
