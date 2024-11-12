@@ -566,7 +566,7 @@ int main(const int argc, char *argv[]) {
   }
 
   // launch the sequential version
-  //   launchSequentail(mSize, molecules);
+  launchSequentail(mSize, molecules);
 
   // launch the parallel version
   launchKernel(mSize, molecules);
