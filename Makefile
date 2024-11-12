@@ -1,13 +1,5 @@
-build-cuda:
-	@nvcc -o ljp main.cu -std=c++11
-
 build:
-	@echo "Building..."
-	@g++ -o ljp main.cpp -std=c++11
-
-build-cuda:
-	@echo "Building with CUDA..."
-	@nvcc -o ljp main.cu
+	@nvcc -o ljp main.cu -std=c++11
 
 clean:
 	@echo "Cleaning..."
@@ -22,6 +14,4 @@ diff-in:
 
 all: build run
 
-all-cuda: build-cuda run
-
-.PHONY: build clean run
+.PHONY: build clean run diff-in all
