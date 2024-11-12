@@ -1,12 +1,16 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <cuda.h>
 #include <chrono>
 #include <cmath>
 #include <iomanip>
-#include "Models.h"
+#include "Models.h" 
 
 using namespace std;
+
+// knernel function definition
+__global__ void heat_dist_kernel(int*, float*, unsigned int);
 
 // Constants
 Config config;

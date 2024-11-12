@@ -1,0 +1,35 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "options": {
+        "cwd": "${workspaceFolder}/build"
+    },
+    "tasks": [
+        {
+            "label": "make",
+            "type": "shell",
+            "command": "make -j16"
+        },
+        {
+            "label": "make clean",
+            "type": "shell",
+            "command": "make clean"
+        },
+        {
+            "label": "make run",
+            "type": "shell",
+            "command": "make run"
+        },
+        {
+            "label": "CUDA Auto",
+            "type": "shell",
+            "command": "make all-cuda"
+        },
+        {
+            "label": "make test",
+            "type": "shell",
+            "command": "make test"
+        }
+    ]
+}
