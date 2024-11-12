@@ -1,3 +1,11 @@
+TARGET = ljp
+
+all: build run
+
+all-cuda: build-cuda run
+
+build-cuda:
+	@nvcc -o ljp main.cu -std=c++11
 
 build:
 	@echo "Building..."
@@ -13,7 +21,5 @@ run:
 
 diff-in:
 	@diff -w m.in mols.in
-
-build-run: build run
 
 .PHONY: build clean run
