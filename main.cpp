@@ -403,6 +403,8 @@ int main(const int argc, char *argv[]) {
         }
     }
 
+    breakPoint("Setup");
+
     int step = 0;
     while (step < config.stepLimit) {
         step++;
