@@ -487,10 +487,9 @@ int main(const int argc, char *argv[]) {
   start_time = start;
 
   // Parse arguments
-  if (argc < 3) {
+  if (argc < 4) {
     std::cerr << "Usage: " << argv[0]
-              << " <config file> <0: no file output, 1:output step file> [init "
-                 "mol file]"
+              << " <config file> <0: no file output, 1:output step file> <0:cpu, 1:gpu>"
               << std::endl;
     return 1;
   }
@@ -507,11 +506,8 @@ int main(const int argc, char *argv[]) {
        << mSize << " mols)" << endl;
 
   outfile = atoi(argv[2]);
-  if (argc == 4) {
-    const string molFile = argv[3];
-    readMoo(molFile, mSize, molecules);
-  } else {
-    rCut = pow(2.0, 1.0 / 6.0 * SIGMA);
+  const int mode = atoi(argv[3]);
+  rCut = pow(2.0, 1.0 / 6.0 * SIGMA);
     // Region size
     region[0] = 1.0 / sqrt(config.density) * config.initUcell_x;
     region[1] = 1.0 / sqrt(config.density) * config.initUcell_y;
@@ -563,13 +559,13 @@ int main(const int argc, char *argv[]) {
     if (outfile) {
       outputMolInitData(mSize, molecules, rCut, region, velMag);
     }
+
+  
+  if (mode == 0) {
+    launchSequentail(mSize, molecules);
+  } else {
+    launchKernel(mSize, molecules);
   }
-
-  // launch the sequential version
-  launchSequentail(mSize, molecules);
-
-  // launch the parallel version
-  launchKernel(mSize, molecules);
 
   breakPoint("Total Time", true);
   return 0;
