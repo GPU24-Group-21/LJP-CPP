@@ -53,20 +53,6 @@ float rCut = 0;
 float region[2] = {0, 0};
 float velMag = 0;
 
-// timer
-auto start = chrono::high_resolution_clock::now();
-auto start_time = start;
-auto end_time = chrono::high_resolution_clock::now();
-
-void breakPoint(const string &msg, const bool end = false) {
-  end_time = chrono::high_resolution_clock::now();
-  auto duration = chrono::duration_cast<chrono::microseconds>(
-      end_time - (end ? start : start_time));
-  cout << "[" << msg << "] " << duration.count() << " ms - " << fixed
-       << setprecision(4) << duration.count() / 1000000.0 << " s" << endl;
-  start_time = chrono::high_resolution_clock::now();
-}
-
 // random
 double random_r() {
   RAND_SEED_P = (RAND_SEED_P * IMUL + IADD) & MASK;
@@ -333,10 +319,17 @@ void stepSummary(const int n, const int step, const double dTime) {
 }
 
 void launchKernel(int N, Molecule *mols) {
+  //cuda clock
+  cudaEvent_t start, stop;
+  cudaEventCreate(&start);
+  cudaEventCreate(&stop);
+
+  // start the clock
+  cudaEventRecord(start);
+
   // define the number of blocks and threads
   int threadsPerBlock = 256;
   int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
-
   cudaError_t error;
 
   // allocate memory on the device
@@ -449,7 +442,15 @@ void launchKernel(int N, Molecule *mols) {
   error = cudaMemcpy(&uSum, d_uSum, sizeof(float), cudaMemcpyDeviceToHost);
   error = cudaMemcpy(&virSum, d_virSum, sizeof(float), cudaMemcpyDeviceToHost);
 
-  breakPoint("GPU Time");
+  // stop the clock
+  cudaEventRecord(stop);
+  cudaEventSynchronize(stop);
+
+  // calculate the time
+  float milliseconds = 0;
+  cudaEventElapsedTime(&milliseconds, start, stop);
+  cout << "[GPU Time] " << milliseconds << "ms - " << milliseconds / 1000.0
+       << "s" << endl; 
 
   // free the memory
   cudaFree(d_mols);
@@ -458,6 +459,8 @@ void launchKernel(int N, Molecule *mols) {
 }
 
 void launchSequentail(int N, Molecule *mols) {
+  auto start_time = chrono::high_resolution_clock::now();
+
   int step = 0;
   while (step < config.stepLimit) {
     step++;
@@ -478,14 +481,16 @@ void launchSequentail(int N, Molecule *mols) {
                    deltaT);
     }
   }
-  breakPoint("Sequential Time");
+
+  auto end_time = chrono::high_resolution_clock::now();
+  auto duration = chrono::duration_cast<chrono::microseconds>(
+      end_time - start_time);
+  cout << "[CPU Time] " << duration.count() << "ms - " << fixed
+       << setprecision(4) << duration.count() / 1000000.0 << "s" << endl;
 }
 
 // Main function
 int main(const int argc, char *argv[]) {
-  start = chrono::high_resolution_clock::now();
-  start_time = start;
-
   // Parse arguments
   if (argc < 4) {
     std::cerr << "Usage: " << argv[0]
@@ -566,8 +571,6 @@ int main(const int argc, char *argv[]) {
   } else {
     launchKernel(mSize, molecules);
   }
-
-  breakPoint("Total Time", true);
   return 0;
 }
 
