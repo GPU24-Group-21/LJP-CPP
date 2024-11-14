@@ -361,33 +361,33 @@ void launchKernel(int N, Molecule *mols) {
 
 
     // launch the kernel
-  cout << "Launching the kernel" << endl;
-  int step = 0;
-  while (step < config.stepLimit) {
-    step++;
+    cout << "Launching the kernel" << endl;
+    int step = 0;
+    while (step < config.stepLimit) {
+        step++;
 
-    // Step 1: pre leapfrog
-    leapfrog_kernel<<<blocksPerGrid, threadsPerBlock>>>(N, d_mols, d_uSum,
-                                                        d_virSum, true);
-    // Step 2: evaluate force
-    evaluateForce_kernel<<<blocksPerGrid, threadsPerBlock>>>(N, d_mols, d_uSum,
-                                                             d_virSum);
-    // Step 3: post leapfrog
-    leapfrog_kernel<<<blocksPerGrid, threadsPerBlock>>>(N, d_mols, d_uSum,
-                                                        d_virSum, false);
+        // Step 1: pre leapfrog
+        leapfrog_kernel<<<blocksPerGrid, threadsPerBlock>>>(N, d_mols, d_uSum,
+                                                            d_virSum, true);
+        // Step 2: evaluate force
+        evaluateForce_kernel<<<blocksPerGrid, threadsPerBlock>>>(N, d_mols, d_uSum,
+                                                                d_virSum);
+        // Step 3: post leapfrog
+        leapfrog_kernel<<<blocksPerGrid, threadsPerBlock>>>(N, d_mols, d_uSum,
+                                                            d_virSum, false);
 
-    // TODO: Step 4: evaluate properties
+        // TODO: Step 4: evaluate properties
 
-    // Step 5: output the result
+        // Step 5: output the result
 
-    // if (config.stepAvg > 0 && step % config.stepAvg == 0) {
-    //     stepSummary(N, step, step * config.deltaT);
-    // }
-    if (outfile) {
-      outputResult("output/" + to_string(step - 1) + ".out", N, mols, step - 1,
-                   step * config.deltaT);
+        // if (config.stepAvg > 0 && step % config.stepAvg == 0) {
+        //     stepSummary(N, step, step * config.deltaT);
+        // }
+        if (outfile) {
+          outputResult("output/" + to_string(step - 1) + ".out", N, mols, step - 1,
+                      step * config.deltaT);
+        }
     }
-  }
 
     // Rest of the kernel launch code remains the same until final memory operations
     
