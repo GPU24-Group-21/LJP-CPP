@@ -9,6 +9,14 @@
 #include <string>
 
 using namespace std;
+#define CHECK_CUDA_ERROR(val) check_cuda((val), #val, __FILE__, __LINE__)
+inline void check_cuda(cudaError_t result, char const* const func, const char* const file, int const line) {
+    if (result) {
+        std::cerr << "CUDA error at " << file << ":" << line << " code=" << static_cast<unsigned int>(result) 
+                  << "(" << func << ") \"" << cudaGetErrorString(result) << "\"" << std::endl;
+        exit(1);
+    }
+}
 
 // kernel constants
 __constant__ Config d_config;
@@ -305,7 +313,7 @@ void stepSummary(const int n, const int step, const double dTime) {
   double pressureStd =
       sqrt(max(0.0, pressure2 / config.stepAvg - pressureAvg * pressureAvg));
 
-  cout << fixed << setprecision(4) << step << "\t" << dTime << "\t"
+  cout << fixed << setprecision(8) << step << "\t" << dTime << "\t"
        << vSum[0] / n << "\t" << totalAvg << "\t" << totalStd << "\t" << keAvg
        << "\t" << keStd << "\t" << pressureAvg << "\t" << pressureStd << endl;
 
@@ -318,96 +326,41 @@ void stepSummary(const int n, const int step, const double dTime) {
   pressure2 = 0;
 }
 
+
 void launchKernel(int N, Molecule *mols) {
-  //cuda clock
-  cudaEvent_t start, stop;
-  cudaEventCreate(&start);
-  cudaEventCreate(&stop);
+    cudaEvent_t start, stop;
+    CHECK_CUDA_ERROR(cudaEventCreate(&start));
+    CHECK_CUDA_ERROR(cudaEventCreate(&stop));
+    CHECK_CUDA_ERROR(cudaEventRecord(start));
 
-  // start the clock
-  cudaEventRecord(start);
+    int threadsPerBlock = 256;
+    int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
 
-  // define the number of blocks and threads
-  int threadsPerBlock = 256;
-  int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
-  cudaError_t error;
+    float uSum = 0, virSum = 0;
+    Molecule *d_mols;
+    float *d_uSum, *d_virSum;
 
-  // allocate memory on the device
-  float uSum = 0, virSum = 0;
+    CHECK_CUDA_ERROR(cudaMalloc(&d_mols, N * sizeof(Molecule)));
+    CHECK_CUDA_ERROR(cudaMalloc(&d_uSum, sizeof(float)));
+    CHECK_CUDA_ERROR(cudaMalloc(&d_virSum, sizeof(float)));
 
-  Molecule *d_mols;
-  float *d_uSum, *d_virSum;
+    // Constants copying
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_config, &config, sizeof(Config)));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_rCut, &rCut, sizeof(float)));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_region, region, 2 * sizeof(float)));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_velMag, &velMag, sizeof(float)));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_deltaT, &config.deltaT, sizeof(float)));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_IADD, &IADD, sizeof(int)));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_IMUL, &IMUL, sizeof(int)));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_MASK, &MASK, sizeof(int)));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_SCALE, &SCALE, sizeof(float)));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_EPSILON, &EPSILON, sizeof(float)));
+    CHECK_CUDA_ERROR(cudaMemcpyToSymbol(d_SIGMA, &SIGMA, sizeof(float)));
 
-  error = cudaMalloc(&d_mols, N * sizeof(Molecule));
-  if (error != cudaSuccess) {
-    cout << "Error: " << cudaGetErrorString(error) << endl;
-  }
-  error = cudaMalloc(&d_uSum, sizeof(float));
-  if (error != cudaSuccess) {
-    cout << "Error: " << cudaGetErrorString(error) << endl;
-  }
-  error = cudaMalloc(&d_virSum, sizeof(float));
-  if (error != cudaSuccess) {
-    cout << "Error: " << cudaGetErrorString(error) << endl;
-  }
+    CHECK_CUDA_ERROR(cudaMemcpy(d_mols, mols, N * sizeof(Molecule), cudaMemcpyHostToDevice));
 
-  // set the constants
-  {
-    error = cudaMemcpyToSymbol(d_config, &config, sizeof(Config));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-    error = cudaMemcpyToSymbol(d_rCut, &rCut, sizeof(float));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-    error = cudaMemcpyToSymbol(d_region, region, 2 * sizeof(float));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-    error = cudaMemcpyToSymbol(d_velMag, &velMag, sizeof(float));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-    error = cudaMemcpyToSymbol(d_deltaT, &config.deltaT, sizeof(float));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
 
-    error = cudaMemcpyToSymbol(d_IADD, &IADD, sizeof(int));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-    error = cudaMemcpyToSymbol(d_IMUL, &IMUL, sizeof(int));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-    error = cudaMemcpyToSymbol(d_MASK, &MASK, sizeof(int));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-    error = cudaMemcpyToSymbol(d_SCALE, &SCALE, sizeof(float));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-    error = cudaMemcpyToSymbol(d_EPSILON, &EPSILON, sizeof(float));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-    error = cudaMemcpyToSymbol(d_SIGMA, &SIGMA, sizeof(float));
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-
-    // copy the data to the device
-    error =
-        cudaMemcpy(d_mols, mols, N * sizeof(Molecule), cudaMemcpyHostToDevice);
-    if (error != cudaSuccess) {
-      cout << "Error: " << cudaGetErrorString(error) << endl;
-    }
-  }
-
-  // launch the kernel
+    // launch the kernel
   cout << "Launching the kernel" << endl;
   int step = 0;
   while (step < config.stepLimit) {
@@ -436,26 +389,23 @@ void launchKernel(int N, Molecule *mols) {
     }
   }
 
-  // copy the data back to the host
-  error =
-      cudaMemcpy(mols, d_mols, N * sizeof(Molecule), cudaMemcpyDeviceToHost);
-  error = cudaMemcpy(&uSum, d_uSum, sizeof(float), cudaMemcpyDeviceToHost);
-  error = cudaMemcpy(&virSum, d_virSum, sizeof(float), cudaMemcpyDeviceToHost);
+    // Rest of the kernel launch code remains the same until final memory operations
+    
+    CHECK_CUDA_ERROR(cudaMemcpy(mols, d_mols, N * sizeof(Molecule), cudaMemcpyDeviceToHost));
+    CHECK_CUDA_ERROR(cudaMemcpy(&uSum, d_uSum, sizeof(float), cudaMemcpyDeviceToHost));
+    CHECK_CUDA_ERROR(cudaMemcpy(&virSum, d_virSum, sizeof(float), cudaMemcpyDeviceToHost));
 
-  // stop the clock
-  cudaEventRecord(stop);
-  cudaEventSynchronize(stop);
+    CHECK_CUDA_ERROR(cudaEventRecord(stop));
+    CHECK_CUDA_ERROR(cudaEventSynchronize(stop));
 
-  // calculate the time
-  float milliseconds = 0;
-  cudaEventElapsedTime(&milliseconds, start, stop);
-  cout << "[GPU Time] " << milliseconds << "ms - " << milliseconds / 1000.0
-       << "s" << endl; 
+    float milliseconds = 0;
+    CHECK_CUDA_ERROR(cudaEventElapsedTime(&milliseconds, start, stop));
+    
+    cout << "[GPU Time] " << milliseconds << "ms - " << milliseconds / 1000.0 << "s" << endl;
 
-  // free the memory
-  cudaFree(d_mols);
-  cudaFree(d_uSum);
-  cudaFree(d_virSum);
+    CHECK_CUDA_ERROR(cudaFree(d_mols));
+    CHECK_CUDA_ERROR(cudaFree(d_uSum));
+    CHECK_CUDA_ERROR(cudaFree(d_virSum));
 }
 
 void launchSequentail(int N, Molecule *mols) {
