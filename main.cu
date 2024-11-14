@@ -489,6 +489,33 @@ void launchSequentail(int N, Molecule *mols) {
        << setprecision(4) << duration.count() / 1000000.0 << "s" << endl;
 }
 
+/*
+  Validate the result
+*/
+void validate(const int N, const Molecule *mols, const Molecule *mols2) {
+  for (int i = 0; i < N; i++) {
+    if (mols[i].id != mols2[i].id) {
+      cout << "Error: id mismatch" << endl;
+      return;
+    }
+    for (int j = 0; j < 2; j++) {
+      if (mols[i].pos[j] != mols2[i].pos[j]) {
+        cout << "Error: pos mismatch" << endl;
+        return;
+      }
+      if (mols[i].vel[j] != mols2[i].vel[j]) {
+        cout << "Error: vel mismatch" << endl;
+        return;
+      }
+      if (mols[i].acc[j] != mols2[i].acc[j]) {
+        cout << "Error: acc mismatch" << endl;
+        return;
+      }
+    }
+  }
+  cout << "Validation passed" << endl;
+}
+
 // Main function
 int main(const int argc, char *argv[]) {
   // Parse arguments
