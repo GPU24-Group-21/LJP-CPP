@@ -35,6 +35,7 @@ __constant__ float d_SIGMA;
 // knernel function definition
 __global__ void leapfrog_kernel(int, Molecule *, float *, float *, bool);
 __global__ void evaluateForce_kernel(int, Molecule *, float *, float *);
+__global__ void resetAcceleration_kernel(int N, Molecule *mols);
 
 // Constants
 Config config;
@@ -219,7 +220,7 @@ __device__ __host__ void toroidal(float &x, float &y, const float region[2]) {
     y -= region[1];
 }
 
-// Calculate the force between two molecules
+
 void leapfrog(const int n, Molecule *mols, const bool pre, const float deltaT) {
   for (int i = 0; i < n; i++) {
     // v(t + Δt/2) = v(t) + (Δt/2)a(t)
@@ -233,7 +234,7 @@ void leapfrog(const int n, Molecule *mols, const bool pre, const float deltaT) {
     }
   }
 }
-
+// Calculate the force between two molecules
 void boundaryCondition(const int n, Molecule *mols) {
   for (int i = 0; i < n; i++) {
     toroidal(mols[i].pos[0], mols[i].pos[1], region);
@@ -363,31 +364,38 @@ void launchKernel(int N, Molecule *mols) {
     // launch the kernel
     cout << "Launching the kernel" << endl;
     int step = 0;
+    
     while (step < config.stepLimit) {
-        step++;
+      step++;
+      double uSum = 0;
+      double virSum = 0;
+      const double deltaT = static_cast<double>(step) * config.deltaT;
+      leapfrog_kernel<<<blocksPerGrid,threadsPerBlock>>>(N, d_mols, d_uSum, d_virSum, true);
+      CHECK_CUDA_ERROR(cudaMemcpy(mols, d_mols, N * sizeof(Molecule), cudaMemcpyDeviceToHost));
+      CHECK_CUDA_ERROR(cudaMemcpy(&uSum, d_uSum, sizeof(float), cudaMemcpyDeviceToHost));
+      CHECK_CUDA_ERROR(cudaMemcpy(&virSum, d_virSum, sizeof(float), cudaMemcpyDeviceToHost));
+      
+      evaluateForce(N, mols, uSum, virSum);
+      CHECK_CUDA_ERROR(cudaMemcpy(d_mols,mols,  N * sizeof(Molecule), cudaMemcpyHostToDevice));
+      CHECK_CUDA_ERROR(cudaMemcpy( d_uSum, &uSum, sizeof(float), cudaMemcpyHostToDevice));
+      CHECK_CUDA_ERROR(cudaMemcpy(d_virSum, &virSum,  sizeof(float), cudaMemcpyHostToDevice));
 
-        // Step 1: pre leapfrog
-        leapfrog_kernel<<<blocksPerGrid, threadsPerBlock>>>(N, d_mols, d_uSum,
-                                                            d_virSum, true);
-        // Step 2: evaluate force
-        evaluateForce_kernel<<<blocksPerGrid, threadsPerBlock>>>(N, d_mols, d_uSum,
-                                                                d_virSum);
-        // Step 3: post leapfrog
-        leapfrog_kernel<<<blocksPerGrid, threadsPerBlock>>>(N, d_mols, d_uSum,
-                                                            d_virSum, false);
-
-        // TODO: Step 4: evaluate properties
-
-        // Step 5: output the result
-
-        // if (config.stepAvg > 0 && step % config.stepAvg == 0) {
-        //     stepSummary(N, step, step * config.deltaT);
-        // }
-        if (outfile) {
-          outputResult("output/" + to_string(step - 1) + ".out", N, mols, step - 1,
-                      step * config.deltaT);
-        }
-    }
+      leapfrog_kernel<<<blocksPerGrid,threadsPerBlock>>>(N, d_mols, d_uSum, d_virSum, false);
+      CHECK_CUDA_ERROR(cudaMemcpy(mols, d_mols, N * sizeof(Molecule), cudaMemcpyDeviceToHost));
+      CHECK_CUDA_ERROR(cudaMemcpy(&uSum, d_uSum, sizeof(float), cudaMemcpyDeviceToHost));
+      CHECK_CUDA_ERROR(cudaMemcpy(&virSum, d_virSum, sizeof(float), cudaMemcpyDeviceToHost));
+    
+      evaluateProperties(N, mols, uSum, virSum);
+      if (config.stepAvg > 0 && step % config.stepAvg == 0) {
+        stepSummary(N, step, deltaT);
+      }
+      // output the result
+      if (outfile) {
+        outputResult("output/" + to_string(step - 1) + ".out", N, mols, step - 1,
+                    deltaT);
+      }
+  }
+    
 
     // Rest of the kernel launch code remains the same until final memory operations
     
@@ -416,19 +424,19 @@ void launchSequentail(int N, Molecule *mols) {
     step++;
     double uSum = 0;
     double virSum = 0;
-    const double deltaT = static_cast<double>(step) * config.deltaT;
+    
     leapfrog(N, mols, true, config.deltaT);
     boundaryCondition(N, mols);
     evaluateForce(N, mols, uSum, virSum);
     leapfrog(N, mols, false, config.deltaT);
     evaluateProperties(N, mols, uSum, virSum);
     if (config.stepAvg > 0 && step % config.stepAvg == 0) {
-      stepSummary(N, step, deltaT);
+      stepSummary(N, step, config.deltaT);
     }
     // output the result
     if (outfile) {
       outputResult("output/" + to_string(step - 1) + ".out", N, mols, step - 1,
-                   deltaT);
+                   config.deltaT);
     }
   }
 
@@ -552,29 +560,38 @@ int main(const int argc, char *argv[]) {
 }
 
 // kernel implementation
-__global__ void leapfrog_kernel(int N, Molecule *mols, float *uSum,
-                                float *virSum, bool pre) {
-  // get the index of the current thread
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void leapfrog_kernel(int N, Molecule *mols, float *uSum, float *virSum, bool pre) {
+  
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+ 
+    int stride = gridDim.x * blockDim.x;
+    
 
-  // check if the index is within the range
-  if (idx < N) {
-    // Step 1: pre leapfrog | Step 4: post leapfrog
-    mols[idx].vel[0] += 0.5 * d_config.deltaT * mols[idx].acc[0];
-    mols[idx].vel[1] += 0.5 * d_config.deltaT * mols[idx].acc[1];
+    for (int idx = tid; idx < N; idx += stride) {
+        // Step 1: pre leapfrog | Step 4: post leapfrog
+        mols[idx].vel[0] += 0.5f * d_config.deltaT * mols[idx].acc[0];
+        mols[idx].vel[1] += 0.5f * d_config.deltaT * mols[idx].acc[1];
 
-    if (pre) {
-      mols[idx].pos[0] += d_config.deltaT * mols[idx].vel[0];
-      mols[idx].pos[1] += d_config.deltaT * mols[idx].vel[1];
+        if (pre) {
+            mols[idx].pos[0] += d_config.deltaT * mols[idx].vel[0];
+            mols[idx].pos[1] += d_config.deltaT * mols[idx].vel[1];
 
-      // Step 2: boundary
-      toroidal(mols[idx].pos[0], mols[idx].pos[1], d_region);
+            // Step 2: boundary
+            toroidal(mols[idx].pos[0], mols[idx].pos[1], d_region);
 
-      // reset the acceleration
-      mols[idx].acc[0] = 0;
-      mols[idx].acc[1] = 0;
+            // reset the acceleration
+            mols[idx].acc[0] = 0.0f;
+            mols[idx].acc[1] = 0.0f;
+        }
     }
-  }
+}
+__global__ void resetAcceleration_kernel(int N, Molecule *mols) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < N) {
+        mols[idx].acc[0] = 0.0f;
+        mols[idx].acc[1] = 0.0f;
+    }
 }
 
 __global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum,
