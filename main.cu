@@ -276,29 +276,31 @@ void evaluateForce(const int n, Molecule *mols, double &uSum, double &virSum) {
 }
 
 void evaluateProperties(const int n, const Molecule *mols, const double &uSum,
-                        const double &virSum) {
-  vSum[0] = 0;
-  vSum[1] = 0;
+                       const double &virSum) {
+ 
+ vSum[0] = 0;
+ vSum[1] = 0;
 
-  double vvSum = 0;
+ double vvSum = 0;
 
-  for (int i = 0; i < n; i++) {
-    vSum[0] += mols[i].vel[0];
-    vSum[1] += mols[i].vel[1];
-    vvSum += mols[i].vel[0] * mols[i].vel[0] + mols[i].vel[1] * mols[i].vel[1];
-  }
+ for (int i = 0; i < n; i++) {
+   vSum[0] += mols[i].vel[0];
+   vSum[1] += mols[i].vel[1];
+   vvSum += mols[i].vel[0] * mols[i].vel[0] + mols[i].vel[1] * mols[i].vel[1];
+ }
 
-  const double ke = 0.5 * vvSum / n;
-  const double energy = ke + uSum / n;
-  const double p = config.density * (vvSum + virSum) / (n * 2);
+ const double ke = 0.5 * vvSum / n;
 
-  keSum += ke;
-  totalEnergy += energy;
-  pressure += p;
+ const double energy = ke + uSum / n;
+ const double p = config.density * (vvSum + virSum) / (n * 2);
 
-  keSum2 += ke * ke;
-  totalEnergy2 += energy * energy;
-  pressure2 += p * p;
+ keSum += ke;
+ totalEnergy += energy;
+ pressure += p;
+
+ keSum2 += ke * ke;
+ totalEnergy2 += energy * energy;
+ pressure2 += p * p;
 }
 
 void stepSummary(const int n, const int step, const double dTime) {
@@ -367,24 +369,22 @@ void launchKernel(int N, Molecule *mols) {
     
     while (step < config.stepLimit) {
       step++;
-      double uSum = 0;
-      double virSum = 0;
+      float uSum = 0;
+      float virSum = 0;
+      CHECK_CUDA_ERROR(cudaMemset(d_uSum, 0, sizeof(float)));
+      CHECK_CUDA_ERROR(cudaMemset(d_virSum, 0, sizeof(float)));
+
       const double deltaT = static_cast<double>(step) * config.deltaT;
-      leapfrog_kernel<<<blocksPerGrid,threadsPerBlock>>>(N, d_mols, d_uSum, d_virSum, true);
-      CHECK_CUDA_ERROR(cudaMemcpy(mols, d_mols, N * sizeof(Molecule), cudaMemcpyDeviceToHost));
-      CHECK_CUDA_ERROR(cudaMemcpy(&uSum, d_uSum, sizeof(float), cudaMemcpyDeviceToHost));
-      CHECK_CUDA_ERROR(cudaMemcpy(&virSum, d_virSum, sizeof(float), cudaMemcpyDeviceToHost));
-      
-      evaluateForce(N, mols, uSum, virSum);
-      CHECK_CUDA_ERROR(cudaMemcpy(d_mols,mols,  N * sizeof(Molecule), cudaMemcpyHostToDevice));
-      CHECK_CUDA_ERROR(cudaMemcpy( d_uSum, &uSum, sizeof(float), cudaMemcpyHostToDevice));
-      CHECK_CUDA_ERROR(cudaMemcpy(d_virSum, &virSum,  sizeof(float), cudaMemcpyHostToDevice));
+      leapfrog_kernel<<<1,1>>>(N, d_mols, d_uSum, d_virSum, true);
+      resetAcceleration_kernel<<<1,1>>>(N, d_mols);
+      evaluateForce_kernel<<<1,1>>>(N, d_mols, d_uSum, d_virSum);
 
       leapfrog_kernel<<<blocksPerGrid,threadsPerBlock>>>(N, d_mols, d_uSum, d_virSum, false);
+
       CHECK_CUDA_ERROR(cudaMemcpy(mols, d_mols, N * sizeof(Molecule), cudaMemcpyDeviceToHost));
       CHECK_CUDA_ERROR(cudaMemcpy(&uSum, d_uSum, sizeof(float), cudaMemcpyDeviceToHost));
+      
       CHECK_CUDA_ERROR(cudaMemcpy(&virSum, d_virSum, sizeof(float), cudaMemcpyDeviceToHost));
-    
       evaluateProperties(N, mols, uSum, virSum);
       if (config.stepAvg > 0 && step % config.stepAvg == 0) {
         stepSummary(N, step, deltaT);
@@ -586,21 +586,43 @@ __global__ void leapfrog_kernel(int N, Molecule *mols, float *uSum, float *virSu
     }
 }
 __global__ void resetAcceleration_kernel(int N, Molecule *mols) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = gridDim.x * blockDim.x;
     
-    if (idx < N) {
+
+    for (int idx = tid; idx < N; idx += stride) {
         mols[idx].acc[0] = 0.0f;
         mols[idx].acc[1] = 0.0f;
     }
 }
 
-__global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum,
-                                     float *virSum) {
-  // get the index of the current thread
-  int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-  if (idx < N) {
-    // TODO: Optimize the kernel
-    // Step 3: evaluate force
-  }
+__global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum, float *virSum) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = gridDim.x * blockDim.x;
+    
+    for(int idx = i; idx < N-1; idx += stride) {
+        for (int j = idx + 1; j < N; j++) {
+            float dr[2] = {
+                mols[idx].pos[0] - mols[j].pos[0],
+                mols[idx].pos[1] - mols[j].pos[1]
+            };
+            
+            toroidal(dr[0], dr[1], d_region);
+            double rr = dr[0] * dr[0] + dr[1] * dr[1];
+            
+            if (rr < d_rCut * d_rCut) {
+                const double r = sqrt(rr);
+                const double fcVal = 48.0 * d_EPSILON * pow(d_SIGMA, 12) / pow(r, 13) -
+                                   24.0 * d_EPSILON * pow(d_SIGMA, 6) / pow(r, 7);
+                
+                atomicAdd(&mols[idx].acc[0], fcVal * dr[0]);
+                atomicAdd(&mols[idx].acc[1], fcVal * dr[1]);
+                atomicAdd(&mols[j].acc[0], -fcVal * dr[0]);
+                atomicAdd(&mols[j].acc[1], -fcVal * dr[1]);
+                
+                atomicAdd(uSum, 4.0 * d_EPSILON * pow(d_SIGMA / r, 12) / r - pow(d_SIGMA / r, 6));
+                atomicAdd(virSum, fcVal * rr);
+            }
+        }
+    }
 }
