@@ -375,11 +375,11 @@ void launchKernel(int N, Molecule *mols) {
       CHECK_CUDA_ERROR(cudaMemset(d_virSum, 0, sizeof(float)));
 
       const double deltaT = static_cast<double>(step) * config.deltaT;
-      leapfrog_kernel<<<1,1>>>(N, d_mols, d_uSum, d_virSum, true);
-      resetAcceleration_kernel<<<1,1>>>(N, d_mols);
-      evaluateForce_kernel<<<1,1>>>(N, d_mols, d_uSum, d_virSum);
+      leapfrog_kernel<<<blocksPerGrid,blocksPerGrid>>>(N, d_mols, d_uSum, d_virSum, true);
+      resetAcceleration_kernel<<<blocksPerGrid,blocksPerGrid>>>(N, d_mols);
+      evaluateForce_kernel<<<blocksPerGrid,blocksPerGrid>>>(N, d_mols, d_uSum, d_virSum);
 
-      leapfrog_kernel<<<blocksPerGrid,threadsPerBlock>>>(N, d_mols, d_uSum, d_virSum, false);
+      leapfrog_kernel<<<blocksPerGrid,blocksPerGrid>>>(N, d_mols, d_uSum, d_virSum, false);
 
       CHECK_CUDA_ERROR(cudaMemcpy(mols, d_mols, N * sizeof(Molecule), cudaMemcpyDeviceToHost));
       CHECK_CUDA_ERROR(cudaMemcpy(&uSum, d_uSum, sizeof(float), cudaMemcpyDeviceToHost));
