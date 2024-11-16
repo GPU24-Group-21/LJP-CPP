@@ -407,44 +407,44 @@ void launchKernel(int N, Molecule *mols) {
     int cycleCount = 0;
     
     while (step < config.stepLimit) {
-      step++;
+        step++;
         CHECK_CUDA_ERROR(cudaMemset(d_uSum, 0, sizeof(float)));
         CHECK_CUDA_ERROR(cudaMemset(d_virSum, 0, sizeof(float)));
 
         const double deltaT = static_cast<double>(step) * config.deltaT;
         
-        // 执行分子动力学计算
+     
         leapfrog_kernel<<<blocksPerGrid,blocksPerGrid>>>(N, d_mols, d_uSum, d_virSum, true);
         resetAcceleration_kernel<<<blocksPerGrid,blocksPerGrid>>>(N, d_mols);
         evaluateForce_kernel<<<blocksPerGrid,blocksPerGrid>>>(N, d_mols, d_uSum, d_virSum);
         leapfrog_kernel<<<blocksPerGrid,blocksPerGrid>>>(N, d_mols, d_uSum, d_virSum, false);
 
-        // 开始新的统计周期
+    
         if (step % config.stepAvg == 1) {
             cycleCount = 0;
             CHECK_CUDA_ERROR(cudaMemset(d_props, 0, sizeof(PropertiesData)));
         }
         
-        // 计算当前步骤属性
+
         evaluateProperties_firstpass<<<blocksPerGrid, threadsPerBlock>>>(
             N, d_mols, d_blockResults
         );
         
-        // 在第二遍计算中传入cycleCount
+
         evaluateProperties_secondpass<<<1, threadsPerBlock>>>(
             N, d_blockResults, blocksPerGrid, d_uSum, d_virSum, d_props, cycleCount
         );
         
         cycleCount++;
 
-        // 在周期结束时统计和输出
+       
         if (config.stepAvg > 0 && step % config.stepAvg == 0) {
     PropertiesData props;
     CHECK_CUDA_ERROR(cudaMemcpy(&props, d_props, sizeof(PropertiesData), 
                                cudaMemcpyDeviceToHost));
     
     if(config.stepAvg == 1) {
-        // stepAvg = 1时直接使用当前值
+    
         vSum[0] = props.vSum[0];
         vSum[1] = props.vSum[1];
         keSum = props.keSum;
@@ -454,7 +454,7 @@ void launchKernel(int N, Molecule *mols) {
         pressure = props.pressure;
         pressure2 = props.pressure2;
     } else {
-        // stepAvg > 1时使用累加值
+      
         vSum[0] = props.vSum[0] / config.stepAvg;
         vSum[1] = props.vSum[1] / config.stepAvg;
         keSum = props.keSum;
@@ -709,7 +709,7 @@ __global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum, float *
 }
 
 __device__ void warpReduce(volatile float* sharedMem, int tid) {
-    // warp内规约
+   
     if(tid < 32) {
         sharedMem[tid] += sharedMem[tid + 32];
         sharedMem[tid] += sharedMem[tid + 16];
@@ -737,7 +737,7 @@ __global__ void evaluateProperties_firstpass(
     float local_vSum1 = 0.0f;
     float local_vvSum = 0.0f;
     
-    // 网格跨步循环处理数据
+
     while(i < N) {
         local_vSum0 += mols[i].vel[0];
         local_vSum1 += mols[i].vel[1];
@@ -746,13 +746,13 @@ __global__ void evaluateProperties_firstpass(
         i += gridSize;
     }
     
-    // 加载到共享内存
+
     s_vSum0[tid] = local_vSum0;
     s_vSum1[tid] = local_vSum1;
     s_vvSum[tid] = local_vvSum;
     __syncthreads();
     
-    // block内规约
+
     for(int s = blockDim.x/2; s > 32; s >>= 1) {
         if(tid < s) {
             s_vSum0[tid] += s_vSum0[tid + s];
@@ -762,14 +762,13 @@ __global__ void evaluateProperties_firstpass(
         __syncthreads();
     }
     
-    // warp规约
+
     if(tid < 32) {
         warpReduce(s_vSum0, tid);
         warpReduce(s_vSum1, tid);
         warpReduce(s_vvSum, tid);
     }
-    
-    // 保存block结果
+
     if(tid == 0) {
         blockResults[blockIdx.x].vSum[0] = s_vSum0[0];
         blockResults[blockIdx.x].vSum[1] = s_vSum1[0];
@@ -796,7 +795,7 @@ __global__ void evaluateProperties_secondpass(
     float local_vSum1 = 0.0f;
     float local_vvSum = 0.0f;
     
-    // 合并所有block的结果
+
     for(int i = tid; i < numBlocks; i += blockDim.x) {
         local_vSum0 += blockResults[i].vSum[0];
         local_vSum1 += blockResults[i].vSum[1];
@@ -807,8 +806,7 @@ __global__ void evaluateProperties_secondpass(
     s_vSum1[tid] = local_vSum1;
     s_vvSum[tid] = local_vvSum;
     __syncthreads();
-    
-    // block内规约
+
     for(int s = blockDim.x/2; s > 32; s >>= 1) {
         if(tid < s) {
             s_vSum0[tid] += s_vSum0[tid + s];
@@ -823,15 +821,14 @@ __global__ void evaluateProperties_secondpass(
         warpReduce(s_vSum1, tid);
         warpReduce(s_vvSum, tid);
     }
-    
-    // 计算最终统计量
+
     if(tid == 0) {
         const float ke = 0.5f * s_vvSum[0] / N;
         const float energy = ke + *uSum / N;
         const float p = d_config.density * (s_vvSum[0] + *virSum) / (N * 2);
         
         if(d_config.stepAvg == 1) {
-            // stepAvg = 1时直接使用当前值
+       
             props->vSum[0] = s_vSum0[0];
             props->vSum[1] = s_vSum1[0];
             props->keSum = ke;
@@ -841,7 +838,7 @@ __global__ void evaluateProperties_secondpass(
             props->totalEnergy2 = energy * energy;
             props->pressure2 = p * p;
         } else {
-            // stepAvg > 1时使用累加逻辑
+          
             props->vSum[0] += s_vSum0[0];
             props->vSum[1] += s_vSum1[0];
             
