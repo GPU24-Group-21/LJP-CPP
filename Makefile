@@ -3,7 +3,7 @@ build:
 
 clean:
 	@echo "Cleaning..."
-	@rm -f ljp
+	@rm -f ljp*
 
 run:
 	@chmod +x run.sh

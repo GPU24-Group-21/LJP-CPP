@@ -15,7 +15,7 @@ echo "Running $prog with input file $infile\n"
 echo "Running CPU version"
 $prog $infile 0 0
 
-# run gpu version
-echo "\n ------------------------------------ "
-echo "Running GPU version"
-$prog $infile 0 1
+# # run gpu version
+# echo "\n ------------------------------------ "
+# echo "Running GPU version"
+# $prog $infile 0 1
