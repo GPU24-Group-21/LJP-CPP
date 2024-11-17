@@ -1,7 +1,9 @@
 .idea
 cmake-build-debug
-output/
+output*
+timing*
 ljp*
 m.in
 mols.in
 .vscode
+validator

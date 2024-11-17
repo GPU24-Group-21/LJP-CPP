@@ -99,14 +99,26 @@ void random_velocity(float &v1, float &v2) {
   v2 = sin(s);
 }
 
-// Read input file
 void readToken(std::ifstream &file, const string &token) {
   string str;
   file >> str;
   if (str != token) {
-    std::cerr << "Error: token not found: " << token << std::endl;
+    std::cerr << "Error: token not found. Expected: " << token
+              << " Got: " << str << std::endl;
     exit(1);
   }
+}
+
+template <typename T>
+void readToken(std::ifstream &file, const string &token, T &val) {
+  string str;
+  file >> str;
+  if (str != token) {
+    std::cerr << "Error: token not found. Expected: " << token
+              << " Got: " << str << std::endl;
+    exit(1);
+  }
+  file >> val;
 }
 
 void readConfig(const string &filename) {
@@ -117,22 +129,14 @@ void readConfig(const string &filename) {
   }
 
   // Read config
-  readToken(file, "deltaT");
-  file >> config.deltaT;
-  readToken(file, "density");
-  file >> config.density;
-  readToken(file, "initUcell_x");
-  file >> config.initUcell_x;
-  readToken(file, "initUcell_y");
-  file >> config.initUcell_y;
-  readToken(file, "stepAvg");
-  file >> config.stepAvg;
-  readToken(file, "stepEquil");
-  file >> config.stepEquil;
-  readToken(file, "stepLimit");
-  file >> config.stepLimit;
-  readToken(file, "temperature");
-  file >> config.temperature;
+  readToken(file, "deltaT", config.deltaT);
+  readToken(file, "density", config.density);
+  readToken(file, "initUcell_x", config.initUcell_x);
+  readToken(file, "initUcell_y", config.initUcell_y);
+  readToken(file, "stepAvg", config.stepAvg);
+  readToken(file, "stepEquil", config.stepEquil);
+  readToken(file, "stepLimit", config.stepLimit);
+  readToken(file, "temperature", config.temperature);
 
   if (debug) {
     cout << "=========== Config ===========" << endl;
@@ -155,12 +159,10 @@ void readMoo(const string &filename, long N, Molecule *molecules) {
     exit(1);
   }
 
-  readToken(file, "rCut");
-  file >> rCut;
+  readToken(file, "rCut", rCut);
   readToken(file, "region");
   file >> region[0] >> region[1];
-  readToken(file, "velMag");
-  file >> velMag;
+  readToken(file, "velMag", velMag);
 
   if (debug) {
     cout << "=========== Pre Defined Props ===========" << endl;
@@ -194,14 +196,13 @@ void outputResult(const string &filename, const int n,
                   const double dTime) {
   ofstream file;
   file.open(filename);
-
   if (!file.is_open()) {
     std::cerr << "Error: file not found" << std::endl;
     exit(1);
   }
 
-  file << "step: " << to_string(step) << endl;
-  file << "ts: " << dTime << endl;
+  file << "step " << to_string(step) << endl;
+  file << "ts " << dTime << endl;
   file << "====================" << endl;
   file << setprecision(5) << fixed;
   const int mark1 = n / 2 + n / 8;
@@ -455,8 +456,9 @@ void launchKernel(int N, Molecule *mols) {
     }
     // output the result
     if (outfile) {
-      outputResult("output/" + to_string(step - 1) + ".out", N, mols, step - 1,
-                   deltaT);
+      outputResult("output/cuda/" + to_string(config.initUcell_x) + "/" +
+                       to_string(step - 1) + ".out",
+                   N, mols, step - 1, deltaT);
     }
   }
 
@@ -505,8 +507,9 @@ void launchSequentail(int N, Molecule *mols) {
     }
     // output the result
     if (outfile) {
-      outputResult("output/" + to_string(step - 1) + ".out", N, mols, step - 1,
-                   config.deltaT);
+      outputResult("output/cpu/" + to_string(config.initUcell_x) + "/" +
+                       to_string(step - 1) + ".out",
+                   N, mols, step - 1, deltaT);
     }
   }
 
@@ -517,62 +520,29 @@ void launchSequentail(int N, Molecule *mols) {
        << setprecision(4) << duration.count() / 1000000.0 << "s" << endl;
 }
 
-/*
-  Validate the result
-*/
-void validate(const int N, const Molecule *mols, const Molecule *mols2) {
-  bool error = false;
-  for (int i = 0; i < N; i++) {
-    for (int j = 0; j < 2; j++) {
-      if (fabs(mols[i].pos[j] - mols2[i].pos[j]) >= 0.009) {
-        std::cerr << "Error: pos mismatch: mols[" << i << "].pos[" << j
-                  << "] = " << mols[i].pos[j] << " != " << mols2[i].pos[j]
-                  << endl;
-        error = error || true;
-      }
-      if (fabs(mols[i].vel[j] - mols2[i].vel[j]) >= 0.009) {
-        std::cerr << "Error: vel mismatch: mols[" << i << "].vel[" << j
-                  << "] = " << mols[i].vel[j] << " != " << mols2[i].vel[j]
-                  << endl;
-        error = error || true;
-      }
-      if (fabs(mols[i].acc[j] - mols2[i].acc[j]) >= 0.009) {
-        std::cerr << "Error: acc mismatch: mols[" << i << "].acc[" << j
-                  << "] = " << mols[i].acc[j] << " != " << mols2[i].acc[j]
-                  << endl;
-        error = error || true;
-      }
-    }
-  }
-
-  if (!error) {
-    cout << "Validation passed" << endl;
-  }
-}
-
 // Main function
 int main(const int argc, char *argv[]) {
   // Parse arguments
-  if (argc < 4) {
-    std::cerr << "Usage: " << argv[0]
-              << " <config file> <0: no file output, 1:output step file> "
-                 "<0:cpu, 1:gpu>"
-              << std::endl;
+  if (argc < 5) {
+    std::cerr
+        << "Usage: " << argv[0]
+        << " <config file> <size> <0: no file output, 1:output step file> "
+           "<0:cpu, 1:gpu>"
+        << std::endl;
     return 1;
   }
 
   const string filename = argv[1];
+  const int size = atoi(argv[2]);
+  outfile = atoi(argv[3]);
+  const int mode = atoi(argv[4]);
   readConfig(filename);
-
-  // create output folder '/output' if not exist
-  system("mkdir -p output");
-
+  config.initUcell_x = config.initUcell_y = size;
   const int mSize = config.initUcell_x * config.initUcell_y;
-  Molecule molecules_c[mSize], molecules_d[mSize];
+  Molecule molecules[mSize];
   cout << "Size: " << config.initUcell_x << "x" << config.initUcell_y << "("
        << mSize << " mols)" << endl;
-  outfile = atoi(argv[2]);
-  const int mode = atoi(argv[3]);
+
   rCut = pow(2.0, 1.0 / 6.0 * SIGMA);
   // Region size
   region[0] = 1.0 / sqrt(config.density) * config.initUcell_x;
@@ -613,40 +583,34 @@ int main(const int argc, char *argv[]) {
       m.multiple_acc(0);
 
       // add to list
-      molecules_c[y * config.initUcell_y + x] = m;
-      molecules_d[y * config.initUcell_y + x] = m;
+      molecules[y * config.initUcell_y + x] = m;
     }
   }
 
   for (int i = 0; i < mSize; i++) {
-    molecules_c[i].vel[0] -= vSum[0] / mSize;
-    molecules_c[i].vel[1] -= vSum[1] / mSize;
-
-    molecules_d[i].vel[0] -= vSum[0] / mSize;
-    molecules_d[i].vel[1] -= vSum[1] / mSize;
+    molecules[i].vel[0] -= vSum[0] / mSize;
+    molecules[i].vel[1] -= vSum[1] / mSize;
   }
 
   if (outfile) {
-    outputMolInitData(mSize, molecules_c, rCut, region, velMag);
+    outputMolInitData(mSize, molecules, rCut, region, velMag);
   }
 
-  cout << "=========== Sequential Version ===========" << endl;
-  // print the header
-  cout
-      << "Step\tTime\t\tvSum\t\tE.Avg\t\tE.Std\t\tK.Avg\t\tK.Std\t\tP.Avg\t\tP."
-         "Std"
-      << endl;
-  launchSequentail(mSize, molecules_c);
-  cout << "=========== GPU Version ===========" << endl;
-  cout
-      << "Step\tTime\t\tvSum\t\tE.Avg\t\tE.Std\t\tK.Avg\t\tK.Std\t\tP.Avg\t\tP."
-         "Std"
-      << endl;
-  launchKernel(mSize, molecules_d);
-
-  // validate the result
-  cout << "=========== Validation ===========" << endl;
-  validate(mSize, molecules_c, molecules_d);
+  if (mode == 0) {
+    cout << "=========== CPU Version ===========" << endl;
+    cout << "Step\tTime\t\tvSum\t\tE.Avg\t\tE.Std\t\tK.Avg\t\tK.Std\t\tP."
+            "Avg\t\tP."
+            "Std"
+         << endl;
+    launchSequentail(mSize, molecules);
+  } else {
+    cout << "=========== CUDA Version ===========" << endl;
+    cout << "Step\tTime\t\tvSum\t\tE.Avg\t\tE.Std\t\tK.Avg\t\tK.Std\t\tP."
+            "Avg\t\tP."
+            "Std"
+         << endl;
+    launchKernel(mSize, molecules);
+  }
   cout << "=========== Done ===========" << endl;
   return 0;
 }

@@ -1,3 +1,4 @@
+#!/bin/bash
 prog="./ljp"
 infile="Rap_2_LJP.in"
 
@@ -6,16 +7,37 @@ if [ -f *.in ]; then
     infile=$(ls *.in)
 fi
 
+mkdir -p output/cpu
+mkdir -p output/cuda
+
+mkdir -p timing/cpu
+mkdir -p timing/cuda
+
+# clear the output folder
+rm -rf output/cpu/*
+rm -rf output/cuda/*
+
 clear
 
-# Run the program with the given arguments
-echo "Running $prog with input file $infile\n"
+series="10 20 40"
 
 # run cpu version
-echo "Running CPU version"
-$prog $infile 0 0
+for size in $series; do
+    # create sub folder
+    mkdir -p output/cpu/$size
+    rm -rf output/cpu/$size/*
+    # run cpu version
+    echo "Running CPU version($size x $size)"
+    $prog $infile $size 1 0 > "output/cpu/$size/final"
+done
 
-# # run gpu version
-# echo "\n ------------------------------------ "
-# echo "Running GPU version"
-# $prog $infile 0 1
+# run gpu version
+echo "\n------------------------------------"
+for size in $series; do
+    # create sub folder
+    mkdir -p output/cuda/$size
+    rm -rf output/cuda/$size/*
+    # run cpu version
+    echo "Running CUDA version($size x $size)"
+    $prog $infile $size 1 1 > "output/cuda/$size/final"
+done
