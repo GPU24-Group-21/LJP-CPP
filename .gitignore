@@ -1,7 +1,7 @@
 .idea
 cmake-build-debug
 output/
-ljp
+ljp*
 m.in
 mols.in
 .vscode
