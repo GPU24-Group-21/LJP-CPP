@@ -14,9 +14,6 @@ validate:
 	@chmod +x validate.sh
 	@./validate.sh
 
-diff-in:
-	@diff -w m.in mols.in
-
 all: build run
 
-.PHONY: build clean run diff-in all validate
+.PHONY: build clean run all validate

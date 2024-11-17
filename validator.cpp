@@ -30,17 +30,15 @@ bool checkMol(ifstream &file1, ifstream &file2) {
               << std::endl;
     exit(1);
   }
-  cout << "Check Mol[" << token1 << "]...";
   if (!(file1 >> x1 >> y1) || !(file2 >> x2 >> y2)) {
     cerr << "Error: EOF while reading molecule coordinates" << endl;
     exit(1);
   }
   if (abs(x1 - x2) > 0.009 || abs(y1 - y2) > 0.009) {
-    cout << "Failed: (" << x1 << "," << y1 << ") != (" << x2 << "," << y2 << ")"
+    cout << "Check Mol[" << token1 << "]Failed: (" << x1 << "," << y1 << ") != (" << x2 << "," << y2 << ")"
          << std::endl;
     exit(1);
   }
-  cout << "Passed" << endl;
   return true;
 }
 
@@ -70,9 +68,6 @@ int main(int argc, char *argv[]) {
               << std::endl;
     return 1;
   }
-
-  cout << "Validate Step " << step1 << endl;
-
   // read second line: "ts 0.005"
   double ts1, ts2;
   readToken(file1, "ts", ts1);

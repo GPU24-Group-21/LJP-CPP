@@ -32,7 +32,7 @@ for size in $series; do
 done
 
 # run gpu version
-echo "\n------------------------------------"
+echo "------------------------------------"
 for size in $series; do
     # create sub folder
     mkdir -p output/cuda/$size
