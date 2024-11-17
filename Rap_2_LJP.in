@@ -1,8 +1,8 @@
 deltaT	0.005
 density	0.8
-initUcell_x	20
-initUcell_y	20
-stepAvg	10
+initUcell_x	400
+initUcell_y	400
+stepAvg	1
 stepEquil	0
-stepLimit 100
+stepLimit 5
 temperature	1.0
