@@ -4,11 +4,20 @@ build:
 
 clean:
 	@echo "Cleaning..."
-	@rm -f ljp*
+	@rm -f ljp* validator
+	@rm -rf output
 
 run:
 	@chmod +x run.sh
 	@./run.sh
+
+run-cpu:
+	@chmod +x run.sh
+	@./run.sh -c
+
+run-cuda:
+	@chmod +x run.sh
+	@./run.sh -g
 
 validate:
 	@chmod +x validate.sh

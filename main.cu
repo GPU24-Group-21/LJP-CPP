@@ -66,7 +66,6 @@ __global__ void evaluateProperties_firstpass(const int N, const Molecule *mols,
 Config config;
 
 bool debug = false;
-bool outfile = false;
 
 uint32_t RAND_SEED_P = 17;
 
@@ -131,10 +130,7 @@ void readConfig(const string &filename) {
   // Read config
   readToken(file, "deltaT", config.deltaT);
   readToken(file, "density", config.density);
-  readToken(file, "initUcell_x", config.initUcell_x);
-  readToken(file, "initUcell_y", config.initUcell_y);
   readToken(file, "stepAvg", config.stepAvg);
-  readToken(file, "stepEquil", config.stepEquil);
   readToken(file, "stepLimit", config.stepLimit);
   readToken(file, "temperature", config.temperature);
 
@@ -142,10 +138,7 @@ void readConfig(const string &filename) {
     cout << "=========== Config ===========" << endl;
     cout << "  deltaT: " << config.deltaT << endl;
     cout << "  density: " << config.density << endl;
-    cout << "  initUcell_x: " << config.initUcell_x << endl;
-    cout << "  initUcell_y: " << config.initUcell_y << endl;
     cout << "  stepAvg: " << config.stepAvg << endl;
-    cout << "  stepEquil: " << config.stepEquil << endl;
     cout << "  stepLimit: " << config.stepLimit << endl;
     cout << "  temperature: " << config.temperature << endl;
   }
@@ -217,10 +210,13 @@ void outputResult(const string &filename, const int n,
   }
 }
 
-void outputMolInitData(const int n, const Molecule *molecules, const float rCut,
+void outputMolInitData(const int n, const int size, const bool gpu,
+                       const Molecule *molecules, const float rCut,
                        float region[2], const float velMag) {
   ofstream file;
-  file.open("mols.in");
+  string path = string("output/") + (gpu ? "cuda" : "cpu") + "/" +
+                to_string(size) + "/" + "init";
+  file.open(path);
   file << setprecision(5) << fixed;
   file << "rCut " << rCut << endl;
   file << "region " << region[0] << " " << region[1] << endl;
@@ -354,13 +350,13 @@ void stepSummary(const int n, const int step, const double dTime) {
   pressure2 = 0;
 }
 
-void launchKernel(int N, Molecule *mols) {
+void launchKernel(int N, Molecule *mols, const int size) {
   cudaEvent_t start, stop;
   CHECK_CUDA_ERROR(cudaEventCreate(&start));
   CHECK_CUDA_ERROR(cudaEventCreate(&stop));
   CHECK_CUDA_ERROR(cudaEventRecord(start));
 
-  int threadsPerBlock = 256;
+  int threadsPerBlock = 8;
   int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
 
   BlockResult *d_blockResults;
@@ -454,12 +450,10 @@ void launchKernel(int N, Molecule *mols) {
 
       stepSummary(N, step, deltaT);
     }
-    // output the result
-    if (outfile) {
-      outputResult("output/cuda/" + to_string(config.initUcell_x) + "/" +
-                       to_string(step - 1) + ".out",
-                   N, mols, step - 1, deltaT);
-    }
+
+    outputResult("output/cuda/" + to_string(size) + "/" + to_string(step - 1) +
+                     ".out",
+                 N, mols, step - 1, deltaT);
   }
 
   // Rest of the kernel launch code remains the same until final memory
@@ -487,7 +481,7 @@ void launchKernel(int N, Molecule *mols) {
   CHECK_CUDA_ERROR(cudaFree(d_props));
 }
 
-void launchSequentail(int N, Molecule *mols) {
+void launchSequentail(int N, Molecule *mols, const int size) {
   auto start_time = chrono::high_resolution_clock::now();
 
   int step = 0;
@@ -505,12 +499,9 @@ void launchSequentail(int N, Molecule *mols) {
     if (config.stepAvg > 0 && step % config.stepAvg == 0) {
       stepSummary(N, step, deltaT);
     }
-    // output the result
-    if (outfile) {
-      outputResult("output/cpu/" + to_string(config.initUcell_x) + "/" +
-                       to_string(step - 1) + ".out",
-                   N, mols, step - 1, deltaT);
-    }
+    outputResult("output/cpu/" + to_string(size) + "/" + to_string(step - 1) +
+                     ".out",
+                 N, mols, step - 1, deltaT);
   }
 
   auto end_time = chrono::high_resolution_clock::now();
@@ -522,31 +513,24 @@ void launchSequentail(int N, Molecule *mols) {
 
 // Main function
 int main(const int argc, char *argv[]) {
-  // Parse arguments
-  if (argc < 5) {
-    std::cerr
-        << "Usage: " << argv[0]
-        << " <config file> <size> <0: no file output, 1:output step file> "
-           "<0:cpu, 1:gpu>"
-        << std::endl;
+  if (argc < 4) {
+    std::cerr << "Usage: " << argv[0] << " <config file> <size> <0:cpu, 1:gpu>"
+              << std::endl;
     return 1;
   }
 
   const string filename = argv[1];
   const int size = atoi(argv[2]);
-  outfile = atoi(argv[3]);
-  const int mode = atoi(argv[4]);
-  readConfig(filename);
-  config.initUcell_x = config.initUcell_y = size;
-  const int mSize = config.initUcell_x * config.initUcell_y;
-  Molecule molecules[mSize];
-  cout << "Size: " << config.initUcell_x << "x" << config.initUcell_y << "("
-       << mSize << " mols)" << endl;
+  const int mode = atoi(argv[3]);
 
+  readConfig(filename);
+  const int mSize = size * size;
+  Molecule molecules[mSize];
   rCut = pow(2.0, 1.0 / 6.0 * SIGMA);
+
   // Region size
-  region[0] = 1.0 / sqrt(config.density) * config.initUcell_x;
-  region[1] = 1.0 / sqrt(config.density) * config.initUcell_y;
+  region[0] = 1.0 / sqrt(config.density) * size;
+  region[1] = 1.0 / sqrt(config.density) * size;
 
   // Velocity magnitude
   velMag = sqrt(NDIM * (1.0 - 1.0 / mSize) * config.temperature);
@@ -558,14 +542,12 @@ int main(const int argc, char *argv[]) {
     cout << "  velMag: " << velMag << endl;
   }
 
-  const double gap[2] = {region[0] / config.initUcell_x,
-                         region[1] / config.initUcell_y};
-
-  for (int y = 0; y < config.initUcell_x; y++) {
-    for (int x = 0; x < config.initUcell_y; x++) {
+  const double gap[2] = {region[0] / size, region[1] / size};
+  for (int y = 0; y < size; y++) {
+    for (int x = 0; x < size; x++) {
       Molecule m;
       // assign molecule id
-      m.id = y * config.initUcell_y + x;
+      m.id = y * size + x;
 
       // assign position
       m.pos[0] = (x + 0.5) * gap[0] + region[0] * -0.5;
@@ -583,7 +565,7 @@ int main(const int argc, char *argv[]) {
       m.multiple_acc(0);
 
       // add to list
-      molecules[y * config.initUcell_y + x] = m;
+      molecules[y * size + x] = m;
     }
   }
 
@@ -592,9 +574,7 @@ int main(const int argc, char *argv[]) {
     molecules[i].vel[1] -= vSum[1] / mSize;
   }
 
-  if (outfile) {
-    outputMolInitData(mSize, molecules, rCut, region, velMag);
-  }
+  outputMolInitData(mSize, size, mode == 1, molecules, rCut, region, velMag);
 
   if (mode == 0) {
     cout << "=========== CPU Version ===========" << endl;
@@ -602,14 +582,14 @@ int main(const int argc, char *argv[]) {
             "Avg\t\tP."
             "Std"
          << endl;
-    launchSequentail(mSize, molecules);
+    launchSequentail(mSize, molecules, size);
   } else {
     cout << "=========== CUDA Version ===========" << endl;
     cout << "Step\tTime\t\tvSum\t\tE.Avg\t\tE.Std\t\tK.Avg\t\tK.Std\t\tP."
             "Avg\t\tP."
             "Std"
          << endl;
-    launchKernel(mSize, molecules);
+    launchKernel(mSize, molecules, size);
   }
   cout << "=========== Done ===========" << endl;
   return 0;
