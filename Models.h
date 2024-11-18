@@ -18,52 +18,42 @@ struct Config {
     float temperature = 0;
 };
 
-static constexpr long IADD = 453806245;
-static constexpr long IMUL = 314159269;
-static constexpr long MASK = 2147483647;
-static constexpr int NDIM = 2;
-static constexpr double SCALE = 0.4656612873e-9;
-
-// LJP parameters:
-static double EPSILON = 1.0;
-static double SIGMA = 1.0;
-
 struct Molecule {
     // Molecule ID
     int id = 0;
     // Position
-    double pos[2] = {0, 0};
+    float pos[2] = {0, 0};
     // Velocity
-    double vel[2] = {0, 0};
+    float vel[2] = {0, 0};
     // Acceleration
-    double acc[2] = {0, 0};
+    float acc[2] = {0, 0};
 
-    void multiple_pos(const double a) {
+    void multiple_pos(const float a) {
         pos[0] *= a;
         pos[1] *= a;
     }
 
-    void multiple_vel(const double a) {
+    void multiple_vel(const float a) {
         vel[0] *= a;
         vel[1] *= a;
     }
 
-    void multiple_acc(const double a) {
+    void multiple_acc(const float a) {
         acc[0] *= a;
         acc[1] *= a;
     }
 
-    void add_pos(const double a) {
+    void add_pos(const float a) {
         pos[0] += a;
         pos[1] += a;
     }
 
-    void add_vel(const double a) {
+    void add_vel(const float a) {
         vel[0] += a;
         vel[1] += a;
     }
 
-    void add_acc(const double a) {
+    void add_acc(const float a) {
         acc[0] += a;
         acc[1] += a;
     }
@@ -76,4 +66,13 @@ struct Prop {
     T sum2 = 0;
 };
 
+// Global variables
+int IADD = 453806245;
+int IMUL = 314159269;
+int MASK = 2147483647;
+int NDIM = 2;
+float SCALE = 0.4656612873e-9;
+// LJP parameters:
+float EPSILON = 1.0;
+float SIGMA = 1.0;
 #endif //MODELS_H

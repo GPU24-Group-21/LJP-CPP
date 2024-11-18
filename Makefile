@@ -1,7 +1,5 @@
-
 build:
-	@echo "Building..."
-	@g++ -o ljp main.cpp -std=c++11
+	@nvcc -o ljp main.cu -std=c++11
 
 clean:
 	@echo "Cleaning..."
@@ -14,6 +12,6 @@ run:
 diff-in:
 	@diff -w m.in mols.in
 
-build-run: build run
+all: build run
 
-.PHONY: build clean run
+.PHONY: build clean run diff-in all
