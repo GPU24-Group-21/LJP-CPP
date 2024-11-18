@@ -139,17 +139,14 @@ void readConfig(const string &filename) {
 
 void readMoo(const string &filename, long N, Molecule *molecules) {
   std::ifstream file(filename);
-
   if (!file.is_open()) {
     std::cerr << "Error: file not found" << std::endl;
     exit(1);
   }
-
   readToken(file, "rCut", rCut);
   readToken(file, "region");
   file >> region[0] >> region[1];
   readToken(file, "velMag", velMag);
-
   if (debug) {
     cout << "=========== Pre Defined Props ===========" << endl;
     cout << "  rCut: " << rCut << endl;
@@ -457,8 +454,6 @@ void launchKernel(int N, Molecule *mols, const int size) {
   }
 
   // Rest of the kernel launch code remains the same until final memory
-  // operations
-
   CHECK_CUDA_ERROR(
       cudaMemcpy(mols, d_mols, N * sizeof(Molecule), cudaMemcpyDeviceToHost));
   CHECK_CUDA_ERROR(
@@ -466,15 +461,15 @@ void launchKernel(int N, Molecule *mols, const int size) {
   CHECK_CUDA_ERROR(
       cudaMemcpy(&virSum, d_virSum, sizeof(float), cudaMemcpyDeviceToHost));
 
+  // stop the timer
   CHECK_CUDA_ERROR(cudaEventRecord(stop));
   CHECK_CUDA_ERROR(cudaEventSynchronize(stop));
-
   float milliseconds = 0;
   CHECK_CUDA_ERROR(cudaEventElapsedTime(&milliseconds, start, stop));
-
   cout << "[GPU Time] " << milliseconds << "ms - " << milliseconds / 1000.0
        << "s" << endl;
 
+  // free the memory
   CHECK_CUDA_ERROR(cudaFree(d_mols));
   CHECK_CUDA_ERROR(cudaFree(d_uSum));
   CHECK_CUDA_ERROR(cudaFree(d_virSum));
@@ -604,7 +599,6 @@ __global__ void leapfrog_kernel(int N, Molecule *mols, float *uSum,
                                 float *virSum, bool pre) {
 
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-
   int stride = gridDim.x * blockDim.x;
 
   for (int idx = tid; idx < N; idx += stride) {
@@ -618,17 +612,13 @@ __global__ void leapfrog_kernel(int N, Molecule *mols, float *uSum,
 
       // Step 2: boundary
       toroidal(mols[idx].pos[0], mols[idx].pos[1], d_region);
-
-      // reset the acceleration
-      mols[idx].acc[0] = 0.0f;
-      mols[idx].acc[1] = 0.0f;
     }
   }
 }
+
 __global__ void resetAcceleration_kernel(int N, Molecule *mols) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
   int stride = gridDim.x * blockDim.x;
-
   for (int idx = tid; idx < N; idx += stride) {
     mols[idx].acc[0] = 0.0f;
     mols[idx].acc[1] = 0.0f;
