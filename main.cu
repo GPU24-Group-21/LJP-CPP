@@ -9,18 +9,24 @@
 #include <string>
 
 using namespace std;
+
+/* =========================
+  CUDA Error Handling Macro
+ ========================= */
 #define CHECK_CUDA_ERROR(val) check_cuda((val), #val, __FILE__, __LINE__)
 inline void check_cuda(cudaError_t result, char const *const func,
                        const char *const file, int const line) {
   if (result) {
-    std::cerr << "CUDA error at " << file << ":" << line
-              << " code=" << static_cast<unsigned int>(result) << "(" << func
+    std::cerr << "CUDA Error at " << file << ":" << line
+              << " Code=" << static_cast<unsigned int>(result) << "(" << func
               << ") \"" << cudaGetErrorString(result) << "\"" << std::endl;
     exit(1);
   }
 }
 
-// kernel constants
+/* =========================
+  Kernel constants
+ ========================= */
 __constant__ Config d_config;
 __constant__ float d_rCut;
 __constant__ float d_region[2];
@@ -34,27 +40,12 @@ __constant__ float d_SCALE;
 __constant__ float d_EPSILON;
 __constant__ float d_SIGMA;
 
-// knernel function definition
+/* =========================
+  Kernel Functions
+ ========================= */
 __global__ void leapfrog_kernel(int, Molecule *, float *, float *, bool);
 __global__ void evaluateForce_kernel(int, Molecule *, float *, float *);
 __global__ void resetAcceleration_kernel(int N, Molecule *mols);
-struct BlockResult {
-  float vSum[2];
-  float vvSum;
-};
-
-struct PropertiesData {
-  float vSum[2];
-  float vvSum;
-  float ke;
-  float keSum;
-  float keSum2;
-  float totalEnergy;
-  float totalEnergy2;
-  float pressure;
-  float pressure2;
-  int cycleCount; // 添加周期计数器
-};
 __global__ void
 evaluateProperties_secondpass(const int N, const BlockResult *blockResults,
                               const int numBlocks, float *uSum, float *virSum,
@@ -62,14 +53,13 @@ evaluateProperties_secondpass(const int N, const BlockResult *blockResults,
 __global__ void evaluateProperties_firstpass(const int N, const Molecule *mols,
                                              BlockResult *blockResults);
 
-// Constants
+/* =========================
+  Global Variables
+ ========================= */
 Config config;
-
 bool debug = false;
-
 uint32_t RAND_SEED_P = 17;
 
-// Statistical variables
 // velocity sum
 double vSum[2] = {0, 0};
 // kinetic energy (Ek)
@@ -82,11 +72,14 @@ double totalEnergy2 = 0;
 double pressure = 0;
 double pressure2 = 0;
 
+// Lennard-Jones potential
 float rCut = 0;
 float region[2] = {0, 0};
 float velMag = 0;
 
-// random
+/* =========================
+  Utils Functions
+ ========================= */
 double random_r() {
   RAND_SEED_P = (RAND_SEED_P * IMUL + IADD) & MASK;
   return SCALE * RAND_SEED_P;
@@ -183,7 +176,9 @@ void readMoo(const string &filename, long N, Molecule *molecules) {
   }
 }
 
-// Output result
+/* =========================
+  Output Functions
+ ========================= */
 void outputResult(const string &filename, const int n,
                   const Molecule *molecules, const int step,
                   const double dTime) {
@@ -229,7 +224,9 @@ void outputMolInitData(const int n, const int size, const bool gpu,
   }
 }
 
-// ============= Core function =============
+/* =========================
+  Simulation Functions
+ ========================= */
 // Toroidal functions
 __device__ __host__ void toroidal(float &x, float &y, const float region[2]) {
   if (x < -0.5 * region[0])
@@ -255,7 +252,7 @@ void leapfrog(const int n, Molecule *mols, const bool pre, const float deltaT) {
     }
   }
 }
-// Calculate the force between two molecules
+
 void boundaryCondition(const int n, Molecule *mols) {
   for (int i = 0; i < n; i++) {
     toroidal(mols[i].pos[0], mols[i].pos[1], region);
@@ -350,6 +347,9 @@ void stepSummary(const int n, const int step, const double dTime) {
   pressure2 = 0;
 }
 
+/* =========================
+  Launch Kernel / CPU
+ ========================= */
 void launchKernel(int N, Molecule *mols, const int size) {
   cudaEvent_t start, stop;
   CHECK_CUDA_ERROR(cudaEventCreate(&start));
@@ -511,7 +511,9 @@ void launchSequentail(int N, Molecule *mols, const int size) {
        << setprecision(4) << duration.count() / 1000000.0 << "s" << endl;
 }
 
-// Main function
+/* =========================
+  Main Functions
+ ========================= */
 int main(const int argc, char *argv[]) {
   if (argc < 4) {
     std::cerr << "Usage: " << argv[0] << " <config file> <size> <0:cpu, 1:gpu>"
@@ -595,7 +597,9 @@ int main(const int argc, char *argv[]) {
   return 0;
 }
 
-// kernel implementation
+/* =========================
+  Kernel Implementation
+ ========================= */
 __global__ void leapfrog_kernel(int N, Molecule *mols, float *uSum,
                                 float *virSum, bool pre) {
 

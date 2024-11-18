@@ -56,6 +56,24 @@ struct Molecule {
   }
 };
 
+struct BlockResult {
+  float vSum[2];
+  float vvSum;
+};
+
+struct PropertiesData {
+  float vSum[2];
+  float vvSum;
+  float ke;
+  float keSum;
+  float keSum2;
+  float totalEnergy;
+  float totalEnergy2;
+  float pressure;
+  float pressure2;
+  int cycleCount;
+};
+
 template <typename T> struct Prop {
   T val = 0;
   T sum1 = 0;
