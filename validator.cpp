@@ -35,8 +35,8 @@ bool checkMol(ifstream &file1, ifstream &file2) {
     exit(1);
   }
   if (abs(x1 - x2) > 0.009 || abs(y1 - y2) > 0.009) {
-    cout << "Check Mol[" << token1 << "]Failed: (" << x1 << "," << y1 << ") != (" << x2 << "," << y2 << ")"
-         << std::endl;
+    cout << "Check Mol[" << token1 << "]Failed: (" << x1 << "," << y1
+         << ") != (" << x2 << "," << y2 << ")" << std::endl;
     exit(1);
   }
   return true;
@@ -72,10 +72,30 @@ int main(int argc, char *argv[]) {
   double ts1, ts2;
   readToken(file1, "ts", ts1);
   readToken(file2, "ts", ts2);
+  double E_1, E_2;
+  readToken(file1, "E", E_1);
+  readToken(file2, "E", E_2);
+  double KE_1, KE_2;
+  readToken(file1, "KE", KE_1);
+  readToken(file2, "KE", KE_2);
+  double P_1, P_2;
+  readToken(file1, "P", P_1);
+  readToken(file2, "P", P_2);
+  double sE_1, sE_2;
+  readToken(file1, "sE", sE_1);
+  readToken(file2, "sE", sE_2);
+  double sKE_1, sKE_2;
+  readToken(file1, "sKE", sKE_1);
+  readToken(file2, "sKE", sKE_2);
+  double sP_1, sP_2;
+  readToken(file1, "sP", sP_1);
+  readToken(file2, "sP", sP_2);
+
   while (!file1.eof() && !file2.eof()) {
     if (!checkMol(file1, file2)) {
       break;
     }
   }
+
   return 0;
 }

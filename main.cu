@@ -45,7 +45,6 @@ __constant__ float d_SIGMA;
  ========================= */
 __global__ void leapfrog_kernel(int, Molecule *, float *, float *, bool);
 __global__ void evaluateForce_kernel(int, Molecule *, float *, float *);
-__global__ void resetAcceleration_kernel(int N, Molecule *mols);
 __global__ void
 evaluateProperties_secondpass(const int N, const BlockResult *blockResults,
                               const int numBlocks, float *uSum, float *virSum,
@@ -181,6 +180,7 @@ void outputResult(const string &filename, const int n,
                   const double dTime) {
   ofstream file;
   file.open(filename);
+
   if (!file.is_open()) {
     std::cerr << "Error: file not found" << std::endl;
     exit(1);
@@ -188,8 +188,14 @@ void outputResult(const string &filename, const int n,
 
   file << "step " << to_string(step) << endl;
   file << "ts " << dTime << endl;
-  file << "====================" << endl;
   file << setprecision(5) << fixed;
+  file << "E " << totalEnergy << endl;
+  file << "KE " << keSum << endl;
+  file << "P " << pressure << endl;
+  file << "sE " << totalEnergy2 << endl;
+  file << "sKE " << keSum2 << endl;
+  file << "sP " << pressure2 << endl;
+  file << "====================" << endl;
   const int mark1 = n / 2 + n / 8;
   const int mark2 = n / 2 + n / 8 + 1;
   for (int i = 0; i < n; i++) {
@@ -295,7 +301,6 @@ void evaluateProperties(const int n, const Molecule *mols, const double &uSum,
 
   vSum[0] = 0;
   vSum[1] = 0;
-
   double vvSum = 0;
 
   for (int i = 0; i < n; i++) {
@@ -305,7 +310,6 @@ void evaluateProperties(const int n, const Molecule *mols, const double &uSum,
   }
 
   const double ke = 0.5 * vvSum / n;
-
   const double energy = ke + uSum / n;
   const double p = config.density * (vvSum + virSum) / (n * 2);
 
@@ -353,7 +357,7 @@ void launchKernel(int N, Molecule *mols, const int size) {
   CHECK_CUDA_ERROR(cudaEventCreate(&stop));
   CHECK_CUDA_ERROR(cudaEventRecord(start));
 
-  int threadsPerBlock = 8;
+  int threadsPerBlock = 256;
   int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
 
   BlockResult *d_blockResults;
@@ -395,15 +399,12 @@ void launchKernel(int N, Molecule *mols, const int size) {
     CHECK_CUDA_ERROR(cudaMemset(d_virSum, 0, sizeof(float)));
 
     const double deltaT = static_cast<double>(step) * config.deltaT;
-
     leapfrog_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols, d_uSum,
                                                       d_virSum, true);
-    resetAcceleration_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols);
     evaluateForce_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols, d_uSum,
                                                            d_virSum);
     leapfrog_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols, d_uSum,
                                                       d_virSum, false);
-
     if (step % config.stepAvg == 1) {
       cycleCount = 0;
       CHECK_CUDA_ERROR(cudaMemset(d_props, 0, sizeof(PropertiesData)));
@@ -415,42 +416,40 @@ void launchKernel(int N, Molecule *mols, const int size) {
     evaluateProperties_secondpass<<<1, threadsPerBlock>>>(
         N, d_blockResults, blocksPerGrid, d_uSum, d_virSum, d_props,
         cycleCount);
-
     cycleCount++;
 
-    if (config.stepAvg > 0 && step % config.stepAvg == 0) {
-      PropertiesData props;
-      CHECK_CUDA_ERROR(cudaMemcpy(&props, d_props, sizeof(PropertiesData),
-                                  cudaMemcpyDeviceToHost));
-
-      if (config.stepAvg == 1) {
-
-        vSum[0] = props.vSum[0];
-        vSum[1] = props.vSum[1];
-        keSum = props.keSum;
-        keSum2 = props.keSum2;
-        totalEnergy = props.totalEnergy;
-        totalEnergy2 = props.totalEnergy2;
-        pressure = props.pressure;
-        pressure2 = props.pressure2;
-      } else {
-
-        vSum[0] = props.vSum[0] / config.stepAvg;
-        vSum[1] = props.vSum[1] / config.stepAvg;
-        keSum = props.keSum;
-        keSum2 = props.keSum2;
-        totalEnergy = props.totalEnergy;
-        totalEnergy2 = props.totalEnergy2;
-        pressure = props.pressure;
-        pressure2 = props.pressure2;
-      }
-
-      stepSummary(N, step, deltaT);
-    }
+    // Copy the data back to host
+    PropertiesData props;
+    CHECK_CUDA_ERROR(cudaMemcpy(&props, d_props, sizeof(PropertiesData),
+                                cudaMemcpyDeviceToHost));
+    vSum[0] = props.vSum[0];
+    vSum[1] = props.vSum[1];
+    keSum = props.keSum;
+    keSum2 = props.keSum2;
+    totalEnergy = props.totalEnergy;
+    totalEnergy2 = props.totalEnergy2;
+    pressure = props.pressure;
+    pressure2 = props.pressure2;
+    CHECK_CUDA_ERROR(
+        cudaMemcpy(mols, d_mols, N * sizeof(Molecule), cudaMemcpyDeviceToHost));
 
     outputResult("output/cuda/" + to_string(size) + "/" + to_string(step - 1) +
                      ".out",
                  N, mols, step - 1, deltaT);
+
+    if (config.stepAvg > 0 && step % config.stepAvg == 0) {
+      // Average and standard deviation of kinetic energy, total energy, and
+      // pressure
+      vSum[0] = props.vSum[0] / config.stepAvg;
+      vSum[1] = props.vSum[1] / config.stepAvg;
+      keSum = props.keSum;
+      keSum2 = props.keSum2;
+      totalEnergy = props.totalEnergy;
+      totalEnergy2 = props.totalEnergy2;
+      pressure = props.pressure;
+      pressure2 = props.pressure2;
+      stepSummary(N, step, deltaT);
+    }
   }
 
   // Rest of the kernel launch code remains the same until final memory
@@ -485,18 +484,17 @@ void launchSequentail(int N, Molecule *mols, const int size) {
     const double deltaT = static_cast<double>(step) * config.deltaT;
     double uSum = 0;
     double virSum = 0;
-
     leapfrog(N, mols, true, config.deltaT);
     boundaryCondition(N, mols);
     evaluateForce(N, mols, uSum, virSum);
     leapfrog(N, mols, false, config.deltaT);
     evaluateProperties(N, mols, uSum, virSum);
-    if (config.stepAvg > 0 && step % config.stepAvg == 0) {
-      stepSummary(N, step, deltaT);
-    }
     outputResult("output/cpu/" + to_string(size) + "/" + to_string(step - 1) +
                      ".out",
                  N, mols, step - 1, deltaT);
+    if (config.stepAvg > 0 && step % config.stepAvg == 0) {
+      stepSummary(N, step, deltaT);
+    }
   }
 
   auto end_time = chrono::high_resolution_clock::now();
@@ -612,16 +610,11 @@ __global__ void leapfrog_kernel(int N, Molecule *mols, float *uSum,
 
       // Step 2: boundary
       toroidal(mols[idx].pos[0], mols[idx].pos[1], d_region);
-    }
-  }
-}
 
-__global__ void resetAcceleration_kernel(int N, Molecule *mols) {
-  int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int stride = gridDim.x * blockDim.x;
-  for (int idx = tid; idx < N; idx += stride) {
-    mols[idx].acc[0] = 0.0f;
-    mols[idx].acc[1] = 0.0f;
+      // Step 3: reset acceleration
+      mols[idx].acc[0] = 0.0f;
+      mols[idx].acc[1] = 0.0f;
+    }
   }
 }
 
@@ -763,7 +756,6 @@ evaluateProperties_secondpass(const int N, const BlockResult *blockResults,
     const float p = d_config.density * (s_vvSum[0] + *virSum) / (N * 2);
 
     if (d_config.stepAvg == 1) {
-
       props->vSum[0] = s_vSum0[0];
       props->vSum[1] = s_vSum1[0];
       props->keSum = ke;
@@ -773,7 +765,6 @@ evaluateProperties_secondpass(const int N, const BlockResult *blockResults,
       props->totalEnergy2 = energy * energy;
       props->pressure2 = p * p;
     } else {
-
       props->vSum[0] += s_vSum0[0];
       props->vSum[1] += s_vSum1[0];
 
