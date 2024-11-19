@@ -22,6 +22,8 @@ if [ "$1" == "-c" ]; then
     # run cpu version
     echo "----------------- CPU $size * $size mols -------------------"
     for size in $series; do
+        mkdir -p output/cpu/$size
+        rm -f output/cpu/$size/*
         # run cpu version
         echo -n "Running CPU version($size x $size)"
         $prog $infile $size 0 > "output/cpu/$size/final"
@@ -30,6 +32,8 @@ if [ "$1" == "-c" ]; then
 elif [ "$1" == "-g" ]; then
     echo "----------------- CUDA -------------------"
     for size in $series; do
+        mkdir -p output/cuda/$size
+        rm -f output/cuda/$size/*
         # run cpu version
         echo -n "Running CUDA version($size x $size)"
         $prog $infile $size 1 > "output/cuda/$size/final"
@@ -39,6 +43,8 @@ else
    # run cpu version
     echo "----------------- CPU -------------------"
     for size in $series; do
+        mkdir -p output/cpu/$size
+        rm -f output/cpu/$size/*
         # run cpu version
         echo -n "Running CPU version($size x $size)"
         $prog $infile $size 0 $verbose > "output/cpu/$size/final"
@@ -47,6 +53,8 @@ else
     # run gpu version
     echo "----------------- CUDA -------------------"
     for size in $series; do
+        mkdir -p output/cuda/$size
+        rm -f output/cuda/$size/*
         # run cpu version
         echo -n "Running CUDA version($size x $size)"
         $prog $infile $size 1 $verbose > "output/cuda/$size/final"
