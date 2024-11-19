@@ -41,4 +41,4 @@ plot:
 
 all: build run
 
-.PHONY: build clean run all validate plot run-cpu run-cuda
+.PHONY: build clean run all validate plot run-cpu run-cuda run-output run-cuda-output run-cpu-output
