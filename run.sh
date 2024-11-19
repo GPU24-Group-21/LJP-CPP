@@ -16,7 +16,7 @@ series="20 40 80 100"
 if [ "$1" == "-c" ]; then
     rm -rf output/cpu/*
     # run cpu version
-    echo "----------------- CPU -------------------"
+    echo "----------------- CPU $size * $size mols -------------------"
     for size in $series; do
         # create sub folder
         mkdir -p output/cpu/$size
@@ -30,7 +30,7 @@ if [ "$1" == "-c" ]; then
 elif [ "$1" == "-g" ]; then
     rm -rf output/cuda/*
     # run gpu version
-    echo "----------------- CUDA -------------------"
+    echo "----------------- CUDA $size * $size mols -------------------"
     for size in $series; do
         # create sub folder
         mkdir -p output/cuda/$size
