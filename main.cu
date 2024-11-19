@@ -1,4 +1,5 @@
 #include "Models.h"
+#include "cudaProfiler.h"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -255,21 +256,19 @@ void leapfrog(const int n, Molecule *mols, const bool pre, const float deltaT) {
       // r(t + Δt) = r(t) + Δt v(t + Δt/2)
       mols[i].pos[0] += deltaT * mols[i].vel[0];
       mols[i].pos[1] += deltaT * mols[i].vel[1];
-    }
-  }
-}
 
-void boundaryCondition(const int n, Molecule *mols) {
-  for (int i = 0; i < n; i++) {
-    toroidal(mols[i].pos[0], mols[i].pos[1], region);
+      toroidal(mols[i].pos[0], mols[i].pos[1], region);
+
+      // a(t + Δt) = 0
+      mols[i].acc[0] = 0;
+      mols[i].acc[1] = 0;
+    }
   }
 }
 
 void evaluateForce(const int n, Molecule *mols, double &uSum, double &virSum) {
   // reset the acceleration
   for (int i = 0; i < n; i++) {
-    mols[i].acc[0] = 0;
-    mols[i].acc[1] = 0;
   }
 
   for (size_t i = 0; i < n - 1; i++) {
@@ -395,6 +394,8 @@ void launchKernel(int N, Molecule *mols, const int size) {
   int step = 0;
   int cycleCount = 0;
 
+  // profile start
+
   while (step < config.stepLimit) {
     step++;
     CHECK_CUDA_ERROR(cudaMemset(d_uSum, 0, sizeof(float)));
@@ -489,7 +490,6 @@ void launchSequentail(int N, Molecule *mols, const int size) {
     double uSum = 0;
     double virSum = 0;
     leapfrog(N, mols, true, config.deltaT);
-    boundaryCondition(N, mols);
     evaluateForce(N, mols, uSum, virSum);
     leapfrog(N, mols, false, config.deltaT);
     evaluateProperties(N, mols, uSum, virSum);
@@ -524,9 +524,6 @@ int main(const int argc, char *argv[]) {
   const int mode = atoi(argv[3]);
   if (argc == 5) {
     verbose = atoi(argv[4]);
-    if (verbose) {
-      cout << "Verbose mode is on" << endl;
-    }
   }
 
   readConfig(filename);
@@ -652,7 +649,6 @@ __global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum,
         atomicAdd(&mols[idx].acc[1], fcVal * dr[1]);
         atomicAdd(&mols[j].acc[0], -fcVal * dr[0]);
         atomicAdd(&mols[j].acc[1], -fcVal * dr[1]);
-
         atomicAdd(uSum, 4.0 * d_EPSILON * pow(d_SIGMA / r, 12) / r -
                             pow(d_SIGMA / r, 6));
         atomicAdd(virSum, fcVal * rr);

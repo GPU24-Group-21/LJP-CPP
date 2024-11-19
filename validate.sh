@@ -18,10 +18,12 @@ for cpu_folder in $output_folder/cpu/*; do
         echo "Missing corresponding CUDA folder for $cpu_folder"
         exit 1
     fi
+    
     if [ ! -f "$cpu_folder/final" ] || [ ! -f "$cuda_folder/final" ]; then
         echo "Missing final output file in $cpu_folder or $cuda_folder"
         exit 1
     fi
+
     for cpu_file in $cpu_folder/*.out; do
         cuda_file="${cpu_file/cpu/cuda}"
         if [ ! -f "$cuda_file" ]; then

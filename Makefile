@@ -11,6 +11,10 @@ run:
 	@chmod +x run.sh
 	@./run.sh
 
+run-output:
+	@chmod +x run.sh
+	@./run.sh -v
+
 run-cpu:
 	@chmod +x run.sh
 	@./run.sh -c

@@ -8,3 +8,4 @@ mols.in
 .vscode
 validator
 *.in
+*.ncu-rep
