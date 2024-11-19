@@ -1,6 +1,6 @@
 build:
-	@nvcc -o ljp main.cu -std=c++11
-	@g++ -o validator validator.cpp -std=c++11
+	@nvcc -o ljp main.cu -std=c++17
+	@g++ -o validator validator.cpp -std=c++17
 
 clean:
 	@echo "Cleaning..."

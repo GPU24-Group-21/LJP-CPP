@@ -1,9 +1,10 @@
 #include "Models.h"
-#include "cudaProfiler.h"
 #include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cuda.h>
+#include <cuda_profiler_api.h>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -179,11 +180,14 @@ void readMoo(const string &filename, long N, Molecule *molecules) {
 /* =========================
   Output Functions
  ========================= */
-void outputResult(const string &filename, const int n,
-                  const Molecule *molecules, const int step,
-                  const double dTime) {
+void outputResult(const string &folder, const int n, const Molecule *molecules,
+                  const int step, const double dTime) {
+
+  // create the folder if not exist
+  std::filesystem::create_directories(folder);
+
   ofstream file;
-  file.open(filename);
+  file.open(folder + "/" + to_string(step - 1) + ".out");
 
   if (!file.is_open()) {
     std::cerr << "Error: file not found" << std::endl;
@@ -215,6 +219,9 @@ void outputResult(const string &filename, const int n,
 void outputMolInitData(const int n, const int size, const bool gpu,
                        const Molecule *molecules, const float rCut,
                        float region[2], const float velMag) {
+  // create the folder if not exist
+  std::filesystem::create_directories(
+      string("output/") + (gpu ? "cuda" : "cpu") + "/" + to_string(size));
   ofstream file;
   string path = string("output/") + (gpu ? "cuda" : "cpu") + "/" +
                 to_string(size) + "/" + "init";
@@ -394,24 +401,27 @@ void launchKernel(int N, Molecule *mols, const int size) {
   int step = 0;
   int cycleCount = 0;
 
-  // profile start
-
   while (step < config.stepLimit) {
     step++;
     CHECK_CUDA_ERROR(cudaMemset(d_uSum, 0, sizeof(float)));
     CHECK_CUDA_ERROR(cudaMemset(d_virSum, 0, sizeof(float)));
 
     const double deltaT = static_cast<double>(step) * config.deltaT;
+
     leapfrog_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols, d_uSum,
                                                       d_virSum, true);
+
     evaluateForce_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols, d_uSum,
                                                            d_virSum);
+
     leapfrog_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols, d_uSum,
                                                       d_virSum, false);
+
     if (step % config.stepAvg == 1) {
       cycleCount = 0;
       CHECK_CUDA_ERROR(cudaMemset(d_props, 0, sizeof(PropertiesData)));
     }
+
     evaluateProperties_firstpass<<<blocksPerGrid, THREADS_PER_BLOCK>>>(
         N, d_mols, d_blockResults);
 
@@ -434,9 +444,10 @@ void launchKernel(int N, Molecule *mols, const int size) {
       pressure2 = props.pressure2;
       CHECK_CUDA_ERROR(cudaMemcpy(mols, d_mols, N * sizeof(Molecule),
                                   cudaMemcpyDeviceToHost));
-      outputResult("output/cuda/" + to_string(size) + "/" +
-                       to_string(step - 1) + ".out",
-                   N, mols, step - 1, deltaT);
+
+      // create the folder if not exist
+
+      outputResult("output/cuda/" + to_string(size), N, mols, step - 1, deltaT);
     }
 
     if (config.stepAvg > 0 && step % config.stepAvg == 0) {
@@ -494,9 +505,7 @@ void launchSequentail(int N, Molecule *mols, const int size) {
     leapfrog(N, mols, false, config.deltaT);
     evaluateProperties(N, mols, uSum, virSum);
     if (verbose)
-      outputResult("output/cpu/" + to_string(size) + "/" + to_string(step - 1) +
-                       ".out",
-                   N, mols, step - 1, deltaT);
+      outputResult("output/cpu/" + to_string(size), N, mols, step - 1, deltaT);
     if (config.stepAvg > 0 && step % config.stepAvg == 0) {
       stepSummary(N, step, deltaT);
     }
@@ -638,19 +647,19 @@ __global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum,
                      mols[idx].pos[1] - mols[j].pos[1]};
 
       toroidal(dr[0], dr[1], d_region);
-      double rr = dr[0] * dr[0] + dr[1] * dr[1];
 
+      float rr = dr[0] * dr[0] + dr[1] * dr[1];
       if (rr < d_rCut * d_rCut) {
-        const double r = sqrt(rr);
-        const double fcVal = 48.0 * d_EPSILON * pow(d_SIGMA, 12) / pow(r, 13) -
-                             24.0 * d_EPSILON * pow(d_SIGMA, 6) / pow(r, 7);
+        const float r = sqrtf(rr);
+        const float fcVal = 48.0 * d_EPSILON * powf(d_SIGMA, 12) / powf(r, 13) -
+                            24.0 * d_EPSILON * powf(d_SIGMA, 6) / powf(r, 7);
 
         atomicAdd(&mols[idx].acc[0], fcVal * dr[0]);
         atomicAdd(&mols[idx].acc[1], fcVal * dr[1]);
         atomicAdd(&mols[j].acc[0], -fcVal * dr[0]);
         atomicAdd(&mols[j].acc[1], -fcVal * dr[1]);
-        atomicAdd(uSum, 4.0 * d_EPSILON * pow(d_SIGMA / r, 12) / r -
-                            pow(d_SIGMA / r, 6));
+        atomicAdd(uSum, 4.0 * d_EPSILON * powf(d_SIGMA / r, 12) / r -
+                            powf(d_SIGMA / r, 6));
         atomicAdd(virSum, fcVal * rr);
       }
     }
@@ -694,6 +703,7 @@ __global__ void evaluateProperties_firstpass(const int N, const Molecule *mols,
   s_vSum0[tid] = local_vSum0;
   s_vSum1[tid] = local_vSum1;
   s_vvSum[tid] = local_vvSum;
+
   __syncthreads();
 
   for (int s = blockDim.x / 2; s > 32; s >>= 1) {
@@ -741,6 +751,7 @@ evaluateProperties_secondpass(const int N, const BlockResult *blockResults,
   s_vSum0[tid] = local_vSum0;
   s_vSum1[tid] = local_vSum1;
   s_vvSum[tid] = local_vvSum;
+
   __syncthreads();
 
   for (int s = blockDim.x / 2; s > 32; s >>= 1) {

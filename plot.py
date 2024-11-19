@@ -56,7 +56,6 @@ def plotMolCoo(mol: Mol, ts, outfile, stats: Stats):
                 'P.sum2:' + P_2 + '; ', loc='left')
     plt.savefig(outfile)
 
-
 def readOutput(path):
     n = 0
     mols = []
