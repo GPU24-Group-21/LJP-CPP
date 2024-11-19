@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import glob
+from PIL import Image
 
 class Mol:
     def __init__(self, id, x, y):
@@ -79,6 +81,20 @@ def readOutput(path):
             n += 1
             mols.append(mol)
     return n, mols, stats
+  
+
+def buildGif(images, folder):
+    frames = []
+    for i in images:
+        temp = Image.open(i)
+        keep = temp.copy()
+        frames.append(keep)
+        temp.close()
+        
+    for i in images:
+        os.remove(i)
+
+    frames[0].save(f'{folder}/result.gif', format='GIF', append_images=frames[1:], save_all=True, duration=30, loop=0)
             
 if __name__ == '__main__':
     # read the output file
@@ -99,3 +115,8 @@ if __name__ == '__main__':
                 n, mols, stats = readOutput(path)
                 # plot the data
                 plotMolCoo(mols, stats.ts, 'output/' + mode + '/' + size + '/' + out.replace('.out', '.png'), stats)
+            # build the gif
+            images = os.listdir(output_dir + mode + '/' + size)
+            images = sorted([output_dir + mode + '/' + size + '/' + image for image in images if image.endswith('.png')], key=lambda x: int(x.split('/')[-1].split('.')[0]))
+            buildGif(images, output_dir + mode + '/' + size)
+    
