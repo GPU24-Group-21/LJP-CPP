@@ -15,6 +15,20 @@ using namespace std;
 #define THREADS_PER_BLOCK 256
 
 /* =========================
+  Custom Math Functions
+ ========================= */
+__device__ __host__ float fastPow(float base, int exp) {
+  float result = 1.0f;
+  while (exp > 0) {
+    if (exp & 1)
+      result *= base;
+    base *= base;
+    exp >>= 1;
+  }
+  return result;
+}
+
+/* =========================
   CUDA Error Handling Macro
  ========================= */
 #define CHECK_CUDA_ERROR(val) check_cuda((val), #val, __FILE__, __LINE__)
@@ -65,16 +79,16 @@ uint32_t RAND_SEED_P = 17;
 bool verbose = true;
 
 // velocity sum
-double vSum[2] = {0, 0};
+float vSum[2] = {0, 0};
 // kinetic energy (Ek)
-double keSum = 0;
-double keSum2 = 0;
+float keSum = 0;
+float keSum2 = 0;
 // total energy (E)
-double totalEnergy = 0;
-double totalEnergy2 = 0;
+float totalEnergy = 0;
+float totalEnergy2 = 0;
 // pressure(P)
-double pressure = 0;
-double pressure2 = 0;
+float pressure = 0;
+float pressure2 = 0;
 
 // Lennard-Jones potential
 float rCut = 0;
@@ -84,13 +98,13 @@ float velMag = 0;
 /* =========================
   Utils Functions
  ========================= */
-double random_r() {
+float random_r() {
   RAND_SEED_P = (RAND_SEED_P * IMUL + IADD) & MASK;
   return SCALE * RAND_SEED_P;
 }
 
 void random_velocity(float &v1, float &v2) {
-  const double s = 2.0 * M_PI * random_r();
+  const float s = 2.0 * M_PI * random_r();
   v1 = cos(s);
   v2 = sin(s);
 }
@@ -181,19 +195,18 @@ void readMoo(const string &filename, long N, Molecule *molecules) {
   Output Functions
  ========================= */
 void outputResult(const string &folder, const int n, const Molecule *molecules,
-                  const int step, const double dTime) {
+                  const int step, const float dTime) {
 
   // create the folder if not exist
-  std::filesystem::create_directories(folder);
+  if (!filesystem::exists(folder))
+    filesystem::create_directories(folder);
 
   ofstream file;
   file.open(folder + "/" + to_string(step - 1) + ".out");
-
   if (!file.is_open()) {
     std::cerr << "Error: file not found" << std::endl;
     exit(1);
   }
-
   file << "step " << to_string(step) << endl;
   file << "ts " << dTime << endl;
   file << setprecision(5) << fixed;
@@ -220,12 +233,14 @@ void outputMolInitData(const int n, const int size, const bool gpu,
                        const Molecule *molecules, const float rCut,
                        float region[2], const float velMag) {
   // create the folder if not exist
-  std::filesystem::create_directories(
-      string("output/") + (gpu ? "cuda" : "cpu") + "/" + to_string(size));
+  if (!filesystem::exists("output"))
+    filesystem::create_directories(string("output/") + (gpu ? "cuda" : "cpu") +
+                                   "/" + to_string(size));
+
+  // open teh file
   ofstream file;
-  string path = string("output/") + (gpu ? "cuda" : "cpu") + "/" +
-                to_string(size) + "/" + "init";
-  file.open(path);
+  file.open(string("output/") + (gpu ? "cuda" : "cpu") + "/" + to_string(size) +
+            "/" + "init");
   file << setprecision(5) << fixed;
   file << "rCut " << rCut << endl;
   file << "region " << region[0] << " " << region[1] << endl;
@@ -273,7 +288,7 @@ void leapfrog(const int n, Molecule *mols, const bool pre, const float deltaT) {
   }
 }
 
-void evaluateForce(const int n, Molecule *mols, double &uSum, double &virSum) {
+void evaluateForce(const int n, Molecule *mols, float &uSum, float &virSum) {
   // reset the acceleration
   for (int i = 0; i < n; i++) {
   }
@@ -284,13 +299,14 @@ void evaluateForce(const int n, Molecule *mols, double &uSum, double &virSum) {
       float dr[2] = {mols[i].pos[0] - mols[j].pos[0],
                      mols[i].pos[1] - mols[j].pos[1]};
       toroidal(dr[0], dr[1], region);
-      const double rr = dr[0] * dr[0] + dr[1] * dr[1];
+      const float rr = dr[0] * dr[0] + dr[1] * dr[1];
 
       // case dr2 < Rc^2
       if (rr < rCut * rCut) {
-        const double r = sqrt(rr);
-        const double fcVal = 48.0 * EPSILON * pow(SIGMA, 12) / pow(r, 13) -
-                             24.0 * EPSILON * pow(SIGMA, 6) / pow(r, 7);
+        const float r = sqrt(rr);
+        const float fcVal =
+            48.0 * EPSILON * fastPow(SIGMA, 12) / fastPow(r, 13) -
+            24.0 * EPSILON * fastPow(SIGMA, 6) / fastPow(r, 7);
         // update the acc
         mols[i].acc[0] += fcVal * dr[0];
         mols[i].acc[1] += fcVal * dr[1];
@@ -298,19 +314,20 @@ void evaluateForce(const int n, Molecule *mols, double &uSum, double &virSum) {
         mols[j].acc[1] -= fcVal * dr[1];
 
         // The completed Lennard-Jones.
-        uSum += 4.0 * EPSILON * pow(SIGMA / r, 12) / r - pow(SIGMA / r, 6);
+        uSum +=
+            4.0 * EPSILON * fastPow(SIGMA / r, 12) / r - fastPow(SIGMA / r, 6);
         virSum += fcVal * rr;
       }
     }
   }
 }
 
-void evaluateProperties(const int n, const Molecule *mols, const double &uSum,
-                        const double &virSum) {
+void evaluateProperties(const int n, const Molecule *mols, const float &uSum,
+                        const float &virSum) {
 
   vSum[0] = 0;
   vSum[1] = 0;
-  double vvSum = 0;
+  float vvSum = 0;
 
   for (int i = 0; i < n; i++) {
     vSum[0] += mols[i].vel[0];
@@ -318,9 +335,9 @@ void evaluateProperties(const int n, const Molecule *mols, const double &uSum,
     vvSum += mols[i].vel[0] * mols[i].vel[0] + mols[i].vel[1] * mols[i].vel[1];
   }
 
-  const double ke = 0.5 * vvSum / n;
-  const double energy = ke + uSum / n;
-  const double p = config.density * (vvSum + virSum) / (n * 2);
+  const float ke = 0.5 * vvSum / n;
+  const float energy = ke + uSum / n;
+  const float p = config.density * (vvSum + virSum) / (n * 2);
 
   keSum += ke;
   totalEnergy += energy;
@@ -331,17 +348,17 @@ void evaluateProperties(const int n, const Molecule *mols, const double &uSum,
   pressure2 += p * p;
 }
 
-void stepSummary(const int n, const int step, const double dTime) {
+void stepSummary(const int n, const int step, const float dTime) {
   // average and standard deviation of kinetic energy, total energy, and
   // pressure
-  double keAvg = keSum / config.stepAvg;
-  double totalAvg = totalEnergy / config.stepAvg;
-  double pressureAvg = pressure / config.stepAvg;
+  float keAvg = keSum / config.stepAvg;
+  float totalAvg = totalEnergy / config.stepAvg;
+  float pressureAvg = pressure / config.stepAvg;
 
-  double keStd = sqrt(max(0.0, keSum2 / config.stepAvg - keAvg * keAvg));
-  double totalStd =
+  float keStd = sqrt(max(0.0, keSum2 / config.stepAvg - keAvg * keAvg));
+  float totalStd =
       sqrt(max(0.0, totalEnergy2 / config.stepAvg - totalAvg * totalAvg));
-  double pressureStd =
+  float pressureStd =
       sqrt(max(0.0, pressure2 / config.stepAvg - pressureAvg * pressureAvg));
 
   cout << fixed << setprecision(8) << step << "\t" << dTime << "\t"
@@ -362,6 +379,7 @@ void stepSummary(const int n, const int step, const double dTime) {
  ========================= */
 void launchKernel(int N, Molecule *mols, const int size) {
   cudaEvent_t start, stop;
+
   CHECK_CUDA_ERROR(cudaEventCreate(&start));
   CHECK_CUDA_ERROR(cudaEventCreate(&stop));
   CHECK_CUDA_ERROR(cudaEventRecord(start));
@@ -406,7 +424,7 @@ void launchKernel(int N, Molecule *mols, const int size) {
     CHECK_CUDA_ERROR(cudaMemset(d_uSum, 0, sizeof(float)));
     CHECK_CUDA_ERROR(cudaMemset(d_virSum, 0, sizeof(float)));
 
-    const double deltaT = static_cast<double>(step) * config.deltaT;
+    const float deltaT = static_cast<float>(step) * config.deltaT;
 
     leapfrog_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols, d_uSum,
                                                       d_virSum, true);
@@ -444,9 +462,6 @@ void launchKernel(int N, Molecule *mols, const int size) {
       pressure2 = props.pressure2;
       CHECK_CUDA_ERROR(cudaMemcpy(mols, d_mols, N * sizeof(Molecule),
                                   cudaMemcpyDeviceToHost));
-
-      // create the folder if not exist
-
       outputResult("output/cuda/" + to_string(size), N, mols, step - 1, deltaT);
     }
 
@@ -497,9 +512,9 @@ void launchSequentail(int N, Molecule *mols, const int size) {
   int step = 0;
   while (step < config.stepLimit) {
     step++;
-    const double deltaT = static_cast<double>(step) * config.deltaT;
-    double uSum = 0;
-    double virSum = 0;
+    const float deltaT = static_cast<float>(step) * config.deltaT;
+    float uSum = 0;
+    float virSum = 0;
     leapfrog(N, mols, true, config.deltaT);
     evaluateForce(N, mols, uSum, virSum);
     leapfrog(N, mols, false, config.deltaT);
@@ -538,7 +553,7 @@ int main(const int argc, char *argv[]) {
   readConfig(filename);
   const int mSize = size * size;
   Molecule molecules[mSize];
-  rCut = pow(2.0, 1.0 / 6.0 * SIGMA);
+  rCut = fastPow(2.0, 1.0 / 6.0 * SIGMA);
 
   // Region size
   region[0] = 1.0 / sqrt(config.density) * size;
@@ -554,7 +569,7 @@ int main(const int argc, char *argv[]) {
     cout << "  velMag: " << velMag << endl;
   }
 
-  const double gap[2] = {region[0] / size, region[1] / size};
+  const float gap[2] = {region[0] / size, region[1] / size};
   for (int y = 0; y < size; y++) {
     for (int x = 0; x < size; x++) {
       Molecule m;
@@ -651,15 +666,16 @@ __global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum,
       float rr = dr[0] * dr[0] + dr[1] * dr[1];
       if (rr < d_rCut * d_rCut) {
         const float r = sqrtf(rr);
-        const float fcVal = 48.0 * d_EPSILON * powf(d_SIGMA, 12) / powf(r, 13) -
-                            24.0 * d_EPSILON * powf(d_SIGMA, 6) / powf(r, 7);
+        const float fcVal =
+            48.0 * d_EPSILON * fastPow(d_SIGMA, 12) / fastPow(r, 13) -
+            24.0 * d_EPSILON * fastPow(d_SIGMA, 6) / fastPow(r, 7);
 
         atomicAdd(&mols[idx].acc[0], fcVal * dr[0]);
         atomicAdd(&mols[idx].acc[1], fcVal * dr[1]);
         atomicAdd(&mols[j].acc[0], -fcVal * dr[0]);
         atomicAdd(&mols[j].acc[1], -fcVal * dr[1]);
-        atomicAdd(uSum, 4.0 * d_EPSILON * powf(d_SIGMA / r, 12) / r -
-                            powf(d_SIGMA / r, 6));
+        atomicAdd(uSum, 4.0 * d_EPSILON * fastPow(d_SIGMA / r, 12) / r -
+                            fastPow(d_SIGMA / r, 6));
         atomicAdd(virSum, fcVal * rr);
       }
     }
