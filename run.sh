@@ -30,7 +30,7 @@ if [ "$1" == "-c" ]; then
 elif [ "$1" == "-g" ]; then
     rm -rf output/cuda/*
     # run gpu version
-    echo "----------------- CUDA $size * $size mols -------------------"
+    echo "----------------- CUDA -------------------"
     for size in $series; do
         # create sub folder
         mkdir -p output/cuda/$size

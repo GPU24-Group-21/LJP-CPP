@@ -10,6 +10,8 @@
 
 using namespace std;
 
+#define THREADS_PER_BLOCK 256
+
 /* =========================
   CUDA Error Handling Macro
  ========================= */
@@ -358,8 +360,7 @@ void launchKernel(int N, Molecule *mols, const int size) {
   CHECK_CUDA_ERROR(cudaEventCreate(&stop));
   CHECK_CUDA_ERROR(cudaEventRecord(start));
 
-  int threadsPerBlock = 256;
-  int blocksPerGrid = (N + threadsPerBlock - 1) / threadsPerBlock;
+  int blocksPerGrid = (N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
 
   BlockResult *d_blockResults;
   PropertiesData *d_props;
@@ -410,10 +411,10 @@ void launchKernel(int N, Molecule *mols, const int size) {
       cycleCount = 0;
       CHECK_CUDA_ERROR(cudaMemset(d_props, 0, sizeof(PropertiesData)));
     }
-    evaluateProperties_firstpass<<<blocksPerGrid, threadsPerBlock>>>(
+    evaluateProperties_firstpass<<<blocksPerGrid, THREADS_PER_BLOCK>>>(
         N, d_mols, d_blockResults);
 
-    evaluateProperties_secondpass<<<1, threadsPerBlock>>>(
+    evaluateProperties_secondpass<<<1, THREADS_PER_BLOCK>>>(
         N, d_blockResults, blocksPerGrid, d_uSum, d_virSum, d_props,
         cycleCount);
     cycleCount++;
@@ -674,9 +675,9 @@ __device__ void warpReduce(volatile float *sharedMem, int tid) {
 
 __global__ void evaluateProperties_firstpass(const int N, const Molecule *mols,
                                              BlockResult *blockResults) {
-  __shared__ float s_vSum0[256];
-  __shared__ float s_vSum1[256];
-  __shared__ float s_vvSum[256];
+  __shared__ float s_vSum0[THREADS_PER_BLOCK];
+  __shared__ float s_vSum1[THREADS_PER_BLOCK];
+  __shared__ float s_vvSum[THREADS_PER_BLOCK];
 
   const unsigned int tid = threadIdx.x;
   unsigned int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -725,9 +726,9 @@ __global__ void
 evaluateProperties_secondpass(const int N, const BlockResult *blockResults,
                               const int numBlocks, float *uSum, float *virSum,
                               PropertiesData *props, const int cycleCount) {
-  __shared__ float s_vSum0[256];
-  __shared__ float s_vSum1[256];
-  __shared__ float s_vvSum[256];
+  __shared__ float s_vSum0[THREADS_PER_BLOCK];
+  __shared__ float s_vSum1[THREADS_PER_BLOCK];
+  __shared__ float s_vvSum[THREADS_PER_BLOCK];
 
   const unsigned int tid = threadIdx.x;
 
