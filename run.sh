@@ -10,7 +10,7 @@ fi
 mkdir -p output/cpu
 mkdir -p output/cuda
 
-series="20"
+series="20 40 80 100"
 
 # read -c for cpu, -g for gpu, otherwise both
 if [ "$1" == "-c" ]; then
@@ -51,7 +51,7 @@ else
         rm -rf output/cpu/$size/*
         # run cpu version
         echo -n "Running CPU version($size x $size)"
-        $prog $infile $size 0 > "output/cpu/$size/final"
+        $prog $infile $size 0 0 > "output/cpu/$size/final"
         echo " - $(grep '^\[CPU Time\]' output/cpu/$size/final)"
     done
 
@@ -63,7 +63,7 @@ else
         rm -rf output/cuda/$size/*
         # run cpu version
         echo -n "Running CUDA version($size x $size)"
-        $prog $infile $size 1 > "output/cuda/$size/final"
+        $prog $infile $size 1 0 > "output/cuda/$size/final"
         echo " - $(grep '^\[GPU Time\]' output/cuda/$size/final)"
     done
 fi

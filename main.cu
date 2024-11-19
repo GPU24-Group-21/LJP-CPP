@@ -58,6 +58,7 @@ __global__ void evaluateProperties_firstpass(const int N, const Molecule *mols,
 Config config;
 bool debug = false;
 uint32_t RAND_SEED_P = 17;
+bool verbose = true;
 
 // velocity sum
 double vSum[2] = {0, 0};
@@ -409,7 +410,6 @@ void launchKernel(int N, Molecule *mols, const int size) {
       cycleCount = 0;
       CHECK_CUDA_ERROR(cudaMemset(d_props, 0, sizeof(PropertiesData)));
     }
-
     evaluateProperties_firstpass<<<blocksPerGrid, threadsPerBlock>>>(
         N, d_mols, d_blockResults);
 
@@ -418,26 +418,29 @@ void launchKernel(int N, Molecule *mols, const int size) {
         cycleCount);
     cycleCount++;
 
-    // Copy the data back to host
-    PropertiesData props;
-    CHECK_CUDA_ERROR(cudaMemcpy(&props, d_props, sizeof(PropertiesData),
-                                cudaMemcpyDeviceToHost));
-    vSum[0] = props.vSum[0];
-    vSum[1] = props.vSum[1];
-    keSum = props.keSum;
-    keSum2 = props.keSum2;
-    totalEnergy = props.totalEnergy;
-    totalEnergy2 = props.totalEnergy2;
-    pressure = props.pressure;
-    pressure2 = props.pressure2;
-    CHECK_CUDA_ERROR(
-        cudaMemcpy(mols, d_mols, N * sizeof(Molecule), cudaMemcpyDeviceToHost));
-
-    outputResult("output/cuda/" + to_string(size) + "/" + to_string(step - 1) +
-                     ".out",
-                 N, mols, step - 1, deltaT);
+    if (verbose) {
+      PropertiesData props;
+      CHECK_CUDA_ERROR(cudaMemcpy(&props, d_props, sizeof(PropertiesData),
+                                  cudaMemcpyDeviceToHost));
+      vSum[0] = props.vSum[0];
+      vSum[1] = props.vSum[1];
+      keSum = props.keSum;
+      keSum2 = props.keSum2;
+      totalEnergy = props.totalEnergy;
+      totalEnergy2 = props.totalEnergy2;
+      pressure = props.pressure;
+      pressure2 = props.pressure2;
+      CHECK_CUDA_ERROR(cudaMemcpy(mols, d_mols, N * sizeof(Molecule),
+                                  cudaMemcpyDeviceToHost));
+      outputResult("output/cuda/" + to_string(size) + "/" +
+                       to_string(step - 1) + ".out",
+                   N, mols, step - 1, deltaT);
+    }
 
     if (config.stepAvg > 0 && step % config.stepAvg == 0) {
+      PropertiesData props;
+      CHECK_CUDA_ERROR(cudaMemcpy(&props, d_props, sizeof(PropertiesData),
+                                  cudaMemcpyDeviceToHost));
       // Average and standard deviation of kinetic energy, total energy, and
       // pressure
       vSum[0] = props.vSum[0] / config.stepAvg;
@@ -489,9 +492,10 @@ void launchSequentail(int N, Molecule *mols, const int size) {
     evaluateForce(N, mols, uSum, virSum);
     leapfrog(N, mols, false, config.deltaT);
     evaluateProperties(N, mols, uSum, virSum);
-    outputResult("output/cpu/" + to_string(size) + "/" + to_string(step - 1) +
-                     ".out",
-                 N, mols, step - 1, deltaT);
+    if (verbose)
+      outputResult("output/cpu/" + to_string(size) + "/" + to_string(step - 1) +
+                       ".out",
+                   N, mols, step - 1, deltaT);
     if (config.stepAvg > 0 && step % config.stepAvg == 0) {
       stepSummary(N, step, deltaT);
     }
@@ -517,6 +521,12 @@ int main(const int argc, char *argv[]) {
   const string filename = argv[1];
   const int size = atoi(argv[2]);
   const int mode = atoi(argv[3]);
+  if (argc == 5) {
+    verbose = atoi(argv[4]);
+    if (verbose) {
+      cout << "Verbose mode is on" << endl;
+    }
+  }
 
   readConfig(filename);
   const int mSize = size * size;
@@ -569,7 +579,8 @@ int main(const int argc, char *argv[]) {
     molecules[i].vel[1] -= vSum[1] / mSize;
   }
 
-  outputMolInitData(mSize, size, mode == 1, molecules, rCut, region, velMag);
+  if (verbose)
+    outputMolInitData(mSize, size, mode == 1, molecules, rCut, region, velMag);
 
   if (mode == 0) {
     cout << "=========== CPU Version ===========" << endl;
