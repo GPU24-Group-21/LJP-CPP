@@ -23,6 +23,10 @@ validate:
 	@chmod +x validate.sh
 	@./validate.sh
 
+plot:
+	python3 plot.py
+	@echo "Plot generated"
+
 all: build run
 
-.PHONY: build clean run all validate
+.PHONY: build clean run all validate plot run-cpu run-cuda
