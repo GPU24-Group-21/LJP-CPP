@@ -23,6 +23,14 @@ run-cuda:
 	@chmod +x run.sh
 	@./run.sh -g
 
+run-cuda-output:
+	@chmod +x run.sh
+	@./run.sh -g -v
+
+run-cpu-output:
+	@chmod +x run.sh
+	@./run.sh -c -v
+
 validate:
 	@chmod +x validate.sh
 	@./validate.sh
