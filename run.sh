@@ -26,7 +26,7 @@ if [ "$1" == "-c" ]; then
         rm -f output/cpu/$size/*
         # run cpu version
         echo -n "Running CPU version($size x $size)"
-        $prog $infile $size 0 > "output/cpu/$size/final"
+        $prog $infile $size 0 $verbose > "output/cpu/$size/final"
         echo " - $(grep '^\[CPU Time\]' output/cpu/$size/final)"
     done
 elif [ "$1" == "-g" ]; then
@@ -36,7 +36,7 @@ elif [ "$1" == "-g" ]; then
         rm -f output/cuda/$size/*
         # run cpu version
         echo -n "Running CUDA version($size x $size)"
-        $prog $infile $size 1 > "output/cuda/$size/final"
+        $prog $infile $size 1 $verbose > "output/cuda/$size/final"
         echo " - $(grep '^\[GPU Time\]' output/cuda/$size/final)"
     done
 else

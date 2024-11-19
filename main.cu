@@ -202,7 +202,7 @@ void outputResult(const string &folder, const int n, const Molecule *molecules,
     filesystem::create_directories(folder);
 
   ofstream file;
-  file.open(folder + "/" + to_string(step - 1) + ".out");
+  file.open(folder + "/" + to_string(step) + ".out");
   if (!file.is_open()) {
     std::cerr << "Error: file not found" << std::endl;
     exit(1);
