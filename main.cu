@@ -12,7 +12,7 @@
 
 using namespace std;
 
-#define THREADS_PER_BLOCK 64
+#define THREADS_PER_BLOCK 128
 
 /* =========================
   Custom Math Functions
