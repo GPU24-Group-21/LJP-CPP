@@ -12,7 +12,7 @@
 
 using namespace std;
 
-#define THREADS_PER_BLOCK 256
+#define THREADS_PER_BLOCK 128
 
 /* =========================
   Custom Math Functions
@@ -384,7 +384,13 @@ void launchKernel(int N, Molecule *mols, const int size) {
   CHECK_CUDA_ERROR(cudaEventCreate(&stop));
   CHECK_CUDA_ERROR(cudaEventRecord(start));
 
-  int blocksPerGrid = (N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK;
+  cudaDeviceProp deviceProp;
+  cudaGetDeviceProperties(&deviceProp, 0);
+  int maxblocks = deviceProp.maxGridSize[0];
+
+  // calculate the number of blocks
+  int blocksPerGrid =
+      min((N + THREADS_PER_BLOCK - 1) / THREADS_PER_BLOCK, maxblocks);
 
   BlockResult *d_blockResults;
   PropertiesData *d_props;
@@ -426,14 +432,14 @@ void launchKernel(int N, Molecule *mols, const int size) {
 
     const float deltaT = static_cast<float>(step) * config.deltaT;
 
-    leapfrog_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols, d_uSum,
-                                                      d_virSum, true);
+    leapfrog_kernel<<<blocksPerGrid, THREADS_PER_BLOCK>>>(N, d_mols, d_uSum,
+                                                          d_virSum, true);
 
-    evaluateForce_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols, d_uSum,
-                                                           d_virSum);
+    evaluateForce_kernel<<<blocksPerGrid, THREADS_PER_BLOCK>>>(
+        N, d_mols, d_uSum, d_virSum);
 
-    leapfrog_kernel<<<blocksPerGrid, blocksPerGrid>>>(N, d_mols, d_uSum,
-                                                      d_virSum, false);
+    leapfrog_kernel<<<blocksPerGrid, THREADS_PER_BLOCK>>>(N, d_mols, d_uSum,
+                                                          d_virSum, false);
 
     if (step % config.stepAvg == 1) {
       cycleCount = 0;
