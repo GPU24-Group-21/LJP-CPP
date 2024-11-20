@@ -12,13 +12,32 @@ mkdir -p output/cuda
 
 series="10 20 40 80 100 200 400"
 verbose=0
+mode="a"
 
 if [ "$1" == "-v" ]; then
     verbose=1
 fi
 
+while getopts "cgv" opt; do
+    case $opt in
+        c)
+            mode="c"
+            ;;
+        g)
+            mode="g"
+            ;;
+        v)
+            verbose=1
+            ;;
+        \?)
+            echo "Invalid option: -$OPTARG" >&2
+            exit 1
+            ;;
+    esac
+done
+
 # read -c for cpu, -g for gpu, otherwise both
-if [ "$1" == "-c" ]; then
+if [ mode == "c" ]; then
     # run cpu version
     echo "----------------- CPU $size * $size mols -------------------"
     for size in $series; do
@@ -29,7 +48,7 @@ if [ "$1" == "-c" ]; then
         $prog $infile $size 0 $verbose > "output/cpu/$size/final"
         echo " - $(grep '^\[CPU Time\]' output/cpu/$size/final)"
     done
-elif [ "$1" == "-g" ]; then
+elif [ mode == "g" ]; then
     echo "----------------- CUDA -------------------"
     for size in $series; do
         mkdir -p output/cuda/$size
