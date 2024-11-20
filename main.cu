@@ -12,7 +12,7 @@
 
 using namespace std;
 
-#define THREADS_PER_BLOCK 128
+#define THREADS_PER_BLOCK 256
 
 /* =========================
   Custom Math Functions
@@ -613,13 +613,13 @@ int main(const int argc, char *argv[]) {
   if (mode == 0) {
     cout << "=========== CPU Version ===========" << endl;
     cout << "Step\tTime\t\tvSum\t\tE.Avg\t\tE.Std\t\tK.Avg\t\tK.Std\t\tP."
-            "Avg\t\tP.\t\tStd"
+            "Avg\t\tP.Std"
          << endl;
     launchSequentail(mSize, molecules, size);
   } else {
     cout << "=========== CUDA Version ===========" << endl;
     cout << "Step\tTime\t\tvSum\t\tE.Avg\t\tE.Std\t\tK.Avg\t\tK.Std\t\tP."
-            "Avg\t\tP.\t\tStd"
+            "Avg\t\tP.Std"
          << endl;
     launchKernel(mSize, molecules, size);
   }
