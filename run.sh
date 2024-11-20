@@ -37,7 +37,7 @@ while getopts "cgv" opt; do
 done
 
 # read -c for cpu, -g for gpu, otherwise both
-if [ mode == "c" ]; then
+if [ $mode == "c" ]; then
     # run cpu version
     echo "----------------- CPU $size * $size mols -------------------"
     for size in $series; do
@@ -48,7 +48,7 @@ if [ mode == "c" ]; then
         $prog $infile $size 0 $verbose > "output/cpu/$size/final"
         echo " - $(grep '^\[CPU Time\]' output/cpu/$size/final)"
     done
-elif [ mode == "g" ]; then
+elif [ $mode == "g" ]; then
     echo "----------------- CUDA -------------------"
     for size in $series; do
         mkdir -p output/cuda/$size
