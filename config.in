@@ -1,0 +1,5 @@
+deltaT	0.005
+density	0.8
+stepAvg	10
+stepLimit 100
+temperature	1.0

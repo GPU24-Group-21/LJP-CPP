@@ -1,7 +1,11 @@
 .idea
 cmake-build-debug
-output/
-ljp
+output*
+timing*
+ljp*
 m.in
 mols.in
 .vscode
+validator
+*.in
+*.ncu-rep
