@@ -607,15 +607,13 @@ int main(const int argc, char *argv[]) {
   if (mode == 0) {
     cout << "=========== CPU Version ===========" << endl;
     cout << "Step\tTime\t\tvSum\t\tE.Avg\t\tE.Std\t\tK.Avg\t\tK.Std\t\tP."
-            "Avg\t\tP."
-            "Std"
+            "Avg\t\tP.\t\tStd"
          << endl;
     launchSequentail(mSize, molecules, size);
   } else {
     cout << "=========== CUDA Version ===========" << endl;
     cout << "Step\tTime\t\tvSum\t\tE.Avg\t\tE.Std\t\tK.Avg\t\tK.Std\t\tP."
-            "Avg\t\tP."
-            "Std"
+            "Avg\t\tP.\t\tStd"
          << endl;
     launchKernel(mSize, molecules, size);
   }
