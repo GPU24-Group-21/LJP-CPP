@@ -10,7 +10,7 @@ fi
 mkdir -p output/cpu
 mkdir -p output/cuda
 
-series="10 20 40"
+series="10 20 40 80 100 200 400"
 verbose=0
 mode="a"
 
