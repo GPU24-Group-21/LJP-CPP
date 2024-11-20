@@ -10,13 +10,9 @@ fi
 mkdir -p output/cpu
 mkdir -p output/cuda
 
-series="10 20 40 80 100 200 400"
+series="10 20 40"
 verbose=0
 mode="a"
-
-if [ "$1" == "-v" ]; then
-    verbose=1
-fi
 
 while getopts "cgv" opt; do
     case $opt in
@@ -39,7 +35,7 @@ done
 # read -c for cpu, -g for gpu, otherwise both
 if [ $mode == "c" ]; then
     # run cpu version
-    echo "----------------- CPU $size * $size mols -------------------"
+    echo "----------------- CPU -------------------"
     for size in $series; do
         mkdir -p output/cpu/$size
         rm -f output/cpu/$size/*
@@ -47,6 +43,10 @@ if [ $mode == "c" ]; then
         echo -n "Running CPU version($size x $size)"
         $prog $infile $size 0 $verbose > "output/cpu/$size/final"
         echo " - $(grep '^\[CPU Time\]' output/cpu/$size/final)"
+
+        if [ $verbose == 1 ]; then
+            python3 plot.py output/cpu/$size &
+        fi
     done
 elif [ $mode == "g" ]; then
     echo "----------------- CUDA -------------------"
@@ -57,6 +57,10 @@ elif [ $mode == "g" ]; then
         echo -n "Running CUDA version($size x $size)"
         $prog $infile $size 1 $verbose > "output/cuda/$size/final"
         echo " - $(grep '^\[GPU Time\]' output/cuda/$size/final)"
+
+        if [ $verbose == 1 ]; then
+            python3 plot.py output/cuda/$size &
+        fi
     done
 else
    # run cpu version
@@ -68,6 +72,10 @@ else
         echo -n "Running CPU version($size x $size)"
         $prog $infile $size 0 $verbose > "output/cpu/$size/final"
         echo " - $(grep '^\[CPU Time\]' output/cpu/$size/final)"
+
+        if [ $verbose == 1 ]; then
+            python3 plot.py output/cpu/$size &
+        fi
     done
     # run gpu version
     echo "----------------- CUDA -------------------"
@@ -78,5 +86,9 @@ else
         echo -n "Running CUDA version($size x $size)"
         $prog $infile $size 1 $verbose > "output/cuda/$size/final"
         echo " - $(grep '^\[GPU Time\]' output/cuda/$size/final)"
+
+        if [ $verbose == 1 ]; then
+            python3 plot.py output/cuda/$size &
+        fi
     done
 fi

@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import sys
 from PIL import Image
 
 class Mol:
@@ -79,7 +80,6 @@ def readOutput(path):
             n += 1
             mols.append(mol)
     return n, mols, stats
-  
 
 def buildGif(images, folder):
     frames = []
@@ -95,26 +95,48 @@ def buildGif(images, folder):
     frames[0].save(f'{folder}/result.gif', format='GIF', append_images=frames[1:], save_all=True, duration=30, loop=0)
             
 if __name__ == '__main__':
-    # read the output file
-    output_dir = 'output/'
-    # get the list of files in the output directory
-    modes = os.listdir(output_dir)
-    # loop through the files
-    for mode in modes:
-        sizes = os.listdir(output_dir + mode)
-        for size in sizes:
-            outs = os.listdir(output_dir + mode + '/' + size)
-            # filter the files, only need .out files
-            outs = [out for out in outs if out.endswith('.out')]
-            # loop through the files
-            for out in outs:
-                # read the output file
-                path = output_dir + mode + '/' + size + '/' + out
-                n, mols, stats = readOutput(path)
-                # plot the data
-                plotMolCoo(mols, stats.ts, 'output/' + mode + '/' + size + '/' + out.replace('.out', '.png'), stats)
-            # build the gif
-            images = os.listdir(output_dir + mode + '/' + size)
-            images = sorted([output_dir + mode + '/' + size + '/' + image for image in images if image.endswith('.png')], key=lambda x: int(x.split('/')[-1].split('.')[0]))
-            buildGif(images, output_dir + mode + '/' + size)
-    
+    args = sys.argv
+    # if provided a folder, read the output files in the folder
+    if len(args) > 1:
+        output_dir = args[1]
+        # read the output file
+        outs = os.listdir(output_dir)
+        # filter the files, only need .out files
+        outs = [out for out in outs if out.endswith('.out')]
+        # loop through the files
+        for out in outs:
+            # read the output file
+            path = output_dir + '/' + out
+            n, mols, stats = readOutput(path)
+            # plot the data
+            plotMolCoo(mols, stats.ts, output_dir + '/' + out.replace('.out', '.png'), stats)
+        
+        # build the gif
+        images = os.listdir(output_dir)
+        images = sorted([output_dir + '/' + image for image in images if image.endswith('.png')], key=lambda x: int(x.split('/')[-1].split('.')[0]))
+        buildGif(images, output_dir)
+    else:
+        # read the output file
+        output_dir = 'output/'
+        # get the list of files in the output directory
+        modes = os.listdir(output_dir)
+        # loop through the files
+        for mode in modes:
+            sizes = os.listdir(output_dir + mode)
+            for size in sizes:
+                outs = os.listdir(output_dir + mode + '/' + size)
+                # filter the files, only need .out files
+                outs = [out for out in outs if out.endswith('.out')]
+                # loop through the files
+                for out in outs:
+                    # read the output file
+                    path = output_dir + mode + '/' + size + '/' + out
+                    n, mols, stats = readOutput(path)
+                    # plot the data
+                    plotMolCoo(mols, stats.ts, 'output/' + mode + '/' + size + '/' + out.replace('.out', '.png'), stats)
+                
+                # build the gif
+                images = os.listdir(output_dir + mode + '/' + size)
+                images = sorted([output_dir + mode + '/' + size + '/' + image for image in images if image.endswith('.png')], key=lambda x: int(x.split('/')[-1].split('.')[0]))
+                buildGif(images, output_dir + mode + '/' + size)
+        

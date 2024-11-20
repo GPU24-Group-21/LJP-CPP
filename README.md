@@ -42,22 +42,29 @@ The simulation is based on the following algorithm:
 make
 
 # Run the simulation
-make run
-# run the cuda only
-make run-cuda
-# run the cpu only
-make run-cpu
+make run # run the cpu and cuda
+make run-cuda # run the cuda only
+make run-cpu # run the cpu only
+
+# or you can run the simulation with output with plots
+make run-output
+make run-cuda-output
+make run-cpu-output
 
 # directly run the simulation
-./ljp config.in [size] [0: cpu, 1: cuda]
+./ljp config.in [size] [0: cpu, 1: cuda] [output: 0, 1(optional, default off)]
 
 # Clean up
 make clean
 
 # or you can run automatically
-make all
+make all # run the simulation without output
+make all-output # run the simulation with output
+
+# manually plot the data
+make plot # if you have the output data
 ```
 
 ## Results
 
-All the results are stored in the `output` directory. The results include the positions and velocities of the particles at each time step, as well as the total energy of the system.
+All the results are stored in the `output` directory. Including `cpu` and `cuda` folders if you choose to output, in each folder, there are subfolder with number of size in x-axis, in each subfolder, the `<step>.out` contains the positions of particles in each step, and the `final` file contains the setps summary and timing, if you plot the data(`using make command with output will auto generated the images`), you can also find the `result.gif` to see the animation of the simulation.

@@ -355,11 +355,11 @@ void stepSummary(const int n, const int step, const float dTime) {
   float totalAvg = totalEnergy / config.stepAvg;
   float pressureAvg = pressure / config.stepAvg;
 
-  float keStd = sqrt(max(0.0, keSum2 / config.stepAvg - keAvg * keAvg));
+  float keStd = sqrt(max(0.0f, keSum2 / config.stepAvg - keAvg * keAvg));
   float totalStd =
-      sqrt(max(0.0, totalEnergy2 / config.stepAvg - totalAvg * totalAvg));
+      sqrt(max(0.0f, totalEnergy2 / config.stepAvg - totalAvg * totalAvg));
   float pressureStd =
-      sqrt(max(0.0, pressure2 / config.stepAvg - pressureAvg * pressureAvg));
+      sqrt(max(0.0f, pressure2 / config.stepAvg - pressureAvg * pressureAvg));
 
   cout << fixed << setprecision(8) << step << "\t" << dTime << "\t"
        << vSum[0] / n << "\t" << totalAvg << "\t" << totalStd << "\t" << keAvg
