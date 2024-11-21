@@ -664,20 +664,22 @@ __global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum,
     for (int j = idx + 1; j < N; j++) {
       float dr[2] = {mols[idx].pos[0] - mols[j].pos[0],
                      mols[idx].pos[1] - mols[j].pos[1]};
-
+      //check the boundary condition
       toroidal(dr[0], dr[1], d_region);
 
       float rr = dr[0] * dr[0] + dr[1] * dr[1];
       if (rr < d_rCut * d_rCut) {
         const float r = sqrtf(rr);
+        //The Lennard Jones potential equation
         const float fcVal =
             48.0 * d_EPSILON * fastPow(d_SIGMA, 12) / fastPow(r, 13) -
             24.0 * d_EPSILON * fastPow(d_SIGMA, 6) / fastPow(r, 7);
-
+        //update acceleration of each molecule
         atomicAdd(&mols[idx].acc[0], fcVal * dr[0]);
         atomicAdd(&mols[idx].acc[1], fcVal * dr[1]);
         atomicAdd(&mols[j].acc[0], -fcVal * dr[0]);
         atomicAdd(&mols[j].acc[1], -fcVal * dr[1]);
+        //The force given by Lennard Jones potential
         atomicAdd(uSum, 4.0 * d_EPSILON * fastPow(d_SIGMA / r, 12) / r -
                             fastPow(d_SIGMA / r, 6));
         atomicAdd(virSum, fcVal * rr);
@@ -685,7 +687,7 @@ __global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum,
     }
   }
 }
-
+//warp level reduce when the numer of thread less than 32
 __device__ void warpReduce(volatile float *sharedMem, int tid) {
 
   if (tid < 32) {
@@ -700,6 +702,7 @@ __device__ void warpReduce(volatile float *sharedMem, int tid) {
 
 __global__ void evaluateProperties_firstpass(const int N, const Molecule *mols,
                                              BlockResult *blockResults) {
+ //Assign shared memory
   __shared__ float s_vSum0[THREADS_PER_BLOCK];
   __shared__ float s_vSum1[THREADS_PER_BLOCK];
   __shared__ float s_vvSum[THREADS_PER_BLOCK];
@@ -711,7 +714,7 @@ __global__ void evaluateProperties_firstpass(const int N, const Molecule *mols,
   float local_vSum0 = 0.0f;
   float local_vSum1 = 0.0f;
   float local_vvSum = 0.0f;
-
+  
   while (i < N) {
     local_vSum0 += mols[i].vel[0];
     local_vSum1 += mols[i].vel[1];
@@ -719,13 +722,13 @@ __global__ void evaluateProperties_firstpass(const int N, const Molecule *mols,
         mols[i].vel[0] * mols[i].vel[0] + mols[i].vel[1] * mols[i].vel[1];
     i += gridSize;
   }
-
+  // load data to shared memory
   s_vSum0[tid] = local_vSum0;
   s_vSum1[tid] = local_vSum1;
   s_vvSum[tid] = local_vvSum;
 
   __syncthreads();
-
+ //stride-based reduction 
   for (int s = blockDim.x / 2; s > 32; s >>= 1) {
     if (tid < s) {
       s_vSum0[tid] += s_vSum0[tid + s];
@@ -755,7 +758,7 @@ evaluateProperties_secondpass(const int N, const BlockResult *blockResults,
   __shared__ float s_vSum0[THREADS_PER_BLOCK];
   __shared__ float s_vSum1[THREADS_PER_BLOCK];
   __shared__ float s_vvSum[THREADS_PER_BLOCK];
-
+  
   const unsigned int tid = threadIdx.x;
 
   float local_vSum0 = 0.0f;
