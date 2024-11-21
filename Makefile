@@ -7,6 +7,11 @@ clean:
 	@rm -f ljp* validator
 	@rm -rf output
 
+info: info.cu
+	@nvcc -o info info.cu -std=c++17
+	@./info
+	@rm -f info
+
 run:
 	@chmod +x run.sh
 	@./run.sh
