@@ -659,10 +659,18 @@ __global__ void leapfrog_kernel(int N, Molecule *mols, float *uSum,
 
 __global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum,
                                      float *virSum) {
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
   int stride = gridDim.x * blockDim.x;
+  
+  const unsigned int warpSize = 32;
+  const unsigned int lane = threadIdx.x % warpSize;
+  const unsigned int FULL_MASK = 0xffffffff;
 
+  float u_local = 0.0f, vir_local = 0.0f;
+  
   for (int idx = i; idx < N - 1; idx += stride) {
+    float acc_x = 0.0f, acc_y = 0.0f;
+    
     for (int j = idx + 1; j < N; j++) {
       float dr[2] = {mols[idx].pos[0] - mols[j].pos[0],
                      mols[idx].pos[1] - mols[j].pos[1]};
@@ -676,15 +684,37 @@ __global__ void evaluateForce_kernel(int N, Molecule *mols, float *uSum,
             48.0 * d_EPSILON * fastPow(d_SIGMA, 12) / fastPow(r, 13) -
             24.0 * d_EPSILON * fastPow(d_SIGMA, 6) / fastPow(r, 7);
 
-        atomicAdd(&mols[idx].acc[0], fcVal * dr[0]);
-        atomicAdd(&mols[idx].acc[1], fcVal * dr[1]);
+        // 累加力到局部变量
+        acc_x += fcVal * dr[0];
+        acc_y += fcVal * dr[1];
+        
+        // 直接更新分子j的加速度
         atomicAdd(&mols[j].acc[0], -fcVal * dr[0]);
         atomicAdd(&mols[j].acc[1], -fcVal * dr[1]);
-        atomicAdd(uSum, 4.0 * d_EPSILON * fastPow(d_SIGMA / r, 12) / r -
-                            fastPow(d_SIGMA / r, 6));
-        atomicAdd(virSum, fcVal * rr);
+        
+        // 能量和virial的局部累加
+        float u_pair = 4.0 * d_EPSILON * (fastPow(d_SIGMA / r, 12) - 
+                                   fastPow(d_SIGMA / r, 6));
+        u_local += u_pair;
+        vir_local += fcVal * rr;
       }
     }
+    
+    // 使用原子操作更新分子idx的加速度
+    atomicAdd(&mols[idx].acc[0], acc_x);
+    atomicAdd(&mols[idx].acc[1], acc_y);
+  }
+  
+  // warp内归约能量和virial
+  for (int offset = warpSize/2; offset > 0; offset /= 2) {
+    u_local += __shfl_down_sync(FULL_MASK, u_local, offset);
+    vir_local += __shfl_down_sync(FULL_MASK, vir_local, offset);
+  }
+  
+  // 只用lane 0更新全局的uSum和virSum
+  if (lane == 0) {
+    atomicAdd(uSum, u_local);
+    atomicAdd(virSum, vir_local);
   }
 }
 
